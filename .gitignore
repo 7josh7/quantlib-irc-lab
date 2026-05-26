@@ -1,0 +1,39 @@
+# Build outputs (Visual Studio + CMake + Ninja)
+.vs/
+build/
+out/
+output/
+CMakeFiles/
+CMakeCache.txt
+CMakeUserPresets.json
+cmake_install.cmake
+*.user
+*.suo
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+Makefile
+
+# vcpkg
+vcpkg_installed/
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# PDFs (source material, reference books — see README "Source Material")
+*.pdf
+
+# Generated CSVs / scratch data
+data/scratch/
+output/*.csv
+
+# Logs
+*.log

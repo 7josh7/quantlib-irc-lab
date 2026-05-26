@@ -1,0 +1,11 @@
+{
+  "name": "irc",
+  "version-string": "0.1.0",
+  "description": "C++ / QuantLib implementation lab for interest-rate and credit models.",
+  "builtin-baseline": "aa40adda5352e87655b8583cfb2451d5e9e276fd",
+  "dependencies": [
+    "quantlib",
+    "eigen3",
+    "gtest"
+  ]
+}

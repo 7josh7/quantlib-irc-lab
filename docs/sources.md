@@ -1,7 +1,9 @@
 # Source mapping
 
-Five source PDFs, with different scopes. Use both source sets — they cover
-different phases of the project.
+Six source PDFs in two categories: **five math/finance references** (the
+four-part series I–IV plus IRC) and **one code-architecture reference**
+(CPP). The math references map to phases by topic (table below); CPP is
+cross-cutting — it informs how the C++ is structured, not what the math is.
 
 ## Sources
 
@@ -12,6 +14,7 @@ different phases of the project.
 | **II** | *Yield Curve And All That* (`note/II. ...pdf`) | Curve construction, modern: simple vs compound rates, multi-curve, **SOFR-centric bootstrap with futures + OIS** (worked Table 1), cross-currency basis swaps, FX-forward currency chains, **Jacobian risk representation**, **PCA hedging and eigen-scenarios** (worked numerical example). |
 | **III** | *Volatility Modeling* (`note/III. ...pdf`) | Vol theory: Bachelier, Dupire local vol, **SABR** (Hagan formula, ATM parameterization, smile-risk Greeks, Bartlett's modified delta). |
 | **IV** | *Breaking Down RFR Modeling* (`note/IV. ...pdf`) | RFR-specific vol: **backward-looking vs forward-looking caplets**, **time-decay SABR** for compounded rates, bottom-up basket aggregation. |
+| **CPP** | Joshi, *C++ Design Patterns and Derivatives Pricing*, 2nd ed. (`note/cpp-design-patterns-and-derivatives-pricing.pdf`) | **Code architecture, not math.** Design patterns for a pricing library: open–closed payoff/curve hierarchy (Ch.2–3), bridge + virtual constructor + parameters class (Ch.4), strategy + decoration + statistics gatherer (Ch.5), a random-numbers class (Ch.6), a templatized exotics/MC engine (Ch.7), trees (Ch.8), solver function-objects (Ch.9), the factory (Ch.10, 14), exception-safe smart-pointer idioms (Ch.13), decoupling/levelization (Ch.16). Equity/FX/MC-flavored and pre-C++11 — **port the patterns, modernize the idioms**. |
 
 ## Rule of priority
 
@@ -45,6 +48,20 @@ mathematical depth or coverage of LMM/Bermudan/CCR, IRC wins.
 | 9 — LSM Bermudan | IRC Ch.12 (optimal stopping), I §3.4 (MC regression framework) | — |
 | 10 — CCR / exposure / CVA | IRC Ch.15, I §3.2–3.3 (EE, MPoR, nested-MC critique) | — |
 
+## Where CPP applies (code architecture, cross-cutting)
+
+CPP is deliberately left out of the phase table above — it's not a per-phase
+*math* source. It applies wherever a phase needs a non-trivial class design:
+
+| Phase / area | CPP material |
+|--------------|--------------|
+| 1 — Mini pricer | Open–closed `yield_curve` base + flat impl (Ch.2–3); floating-leg simple vs daily-compounded **Strategy** (Ch.5); bridge + parameters class (Ch.4). |
+| 4 — Scenario engine | Deterministic shocks + PCA eigen-scenarios behind one interface = **Strategy** (Ch.5). |
+| 6 — Hull–White | Trinomial-tree class design (Ch.8). |
+| 7 — Implied vol / SABR calibration | Solver via **function objects** + Newton–Raphson (Ch.9). |
+| Roadmap-only — hand-rolled LMM / LSM Monte Carlo | **Most valuable here.** MC framework design: RNG class (Ch.6), statistics gatherer (Ch.5), exotics/path-generation engine (Ch.7), templatized factory (Ch.10, 14). |
+| Throughout | Exception safety + smart pointers (Ch.13); header/levelization decoupling (Ch.16). |
+
 ## What each source does NOT cover
 
 - **IRC** doesn't deeply cover: SOFR-era multi-curve construction with
@@ -54,6 +71,9 @@ mathematical depth or coverage of LMM/Bermudan/CCR, IRC wins.
 - **Four-part series** doesn't cover: Hull–White, Vasicek, LMM, Bermudan
   swaption / LSM in depth, MBS, full CCR exposure simulation methodology.
   Use IRC for these.
+- **CPP** covers no financial math at all, and its worked examples are
+  equity/FX/MC (Black–Scholes, Asian options), not rates. Take the design,
+  not the instruments — and modernize the pre-C++11 idioms.
 
 ## Citation discipline
 

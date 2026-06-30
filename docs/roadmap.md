@@ -8,6 +8,12 @@ Source citations per phase use the IDs from [sources.md](sources.md). The
 four-part series (I–IV) is primary for Phases 0–7; IRC is primary for
 Phases 8–10.
 
+**Code architecture:** the math sources say *what* to compute; **CPP**
+(Joshi, *C++ Design Patterns and Derivatives Pricing*) says *how* to
+structure the C++. It's cross-cutting, not tied to one phase — port the
+patterns, modernize the pre-C++11 idioms. Pointers are noted inline below;
+full map in [sources.md](sources.md#where-cpp-applies-code-architecture-cross-cutting).
+
 ---
 
 ## Current scope — Phase 0–4 (committed)
@@ -63,7 +69,8 @@ Modules:
 - `src/core/yield_curve.hpp` — abstract base, flat curve implementation.
 - `src/rates/fixed_leg.hpp`, `floating_leg.hpp`, `vanilla_swap.hpp` —
   minimal hand-rolled pricer. Floating leg supports both simple-rate and
-  daily-compounded modes via a strategy parameter.
+  daily-compounded modes via a strategy parameter (Strategy pattern —
+  CPP Ch.5; open–closed `yield_curve` hierarchy — CPP Ch.2–3).
 
 Tests:
 
@@ -205,7 +212,7 @@ Milestone: tag `v1.1-cds`.
 
 Add `src/models/`. Vasicek and Hull–White dynamics, trinomial tree, ZCB
 price matches analytic, calibration to initial curve, comparison with
-QuantLib `HullWhite`.
+QuantLib `HullWhite`. (Tree class design — CPP Ch.8.)
 
 Milestone: tag `v1.2-hw`.
 
@@ -214,7 +221,8 @@ Milestone: tag `v1.2-hw`.
 **Sources:** III §4.3–4.8 (SABR, Hagan formula, ATM parameterization, smile-risk Greeks, Bartlett's delta), IV §3 (time-decay SABR for backward-looking RFR caplets).
 
 Black caplet formula, cap/floor pricer, Black swaption pricer, SABR
-implied vol, SABR calibration to swaption smile. Then add **time-decay
+implied vol, SABR calibration to swaption smile (solver via function
+objects + Newton–Raphson — CPP Ch.9). Then add **time-decay
 SABR** per Source IV §3 and price a **backward-looking RFR caplet** —
 this is the modern OTC standard and the differentiator vs a vanilla
 Black/SABR exercise.
@@ -252,7 +260,10 @@ correlation parametrization — none of it is fast. Budget 6–8 weeks if
 pursued.
 
 When doing this, **use QuantLib's MC infrastructure** (PathGenerator,
-RNG, Brownian bridge). Hand-roll only the model logic.
+RNG, Brownian bridge). Hand-roll only the model logic. For structuring
+that hand-rolled logic, CPP's MC framework is the canonical reference —
+RNG class (Ch.6), statistics gatherer (Ch.5), exotics/path-generation
+engine (Ch.7). This is where CPP earns its place most.
 
 ### LSM Bermudan — 3–4 weeks, but only after Hull–White
 

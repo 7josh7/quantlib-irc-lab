@@ -14,6 +14,23 @@ structure the C++. It's cross-cutting, not tied to one phase — port the
 patterns, modernize the pre-C++11 idioms. Pointers are noted inline below;
 full map in [sources.md](sources.md#where-cpp-applies-code-architecture-cross-cutting).
 
+## Prior art to port from QuantBricker
+
+Reference: [Tiffany-YQY/QuantBricker](https://github.com/Tiffany-YQY/QuantBricker)
+(Python, Phases 0–7 scope, no docs/tests). Patterns worth stealing:
+
+| Pattern | Where | Notes |
+|---|---|---|
+| **Jacobian model→market risk propagation** (`model_jacobian`, `risk_postprocess`, per-component `..._gradient_wrt_state`) | **Phase 2 — promote from stretch to deliverable** | Her cleanest idea. Every component exposes analytic gradient w.r.t. its state; the model composes them into a Jacobian, then post-multiplies gradients into market-quote space (Source II §3.4). Match this. |
+| **Registry / plugin architecture** (`ModelDeserializerRegistry`, `IndexRegistry`, `ProductBuilderRegistry`) | Phase 2 onward | Self-registering pricers, curves, products. CPP Ch.10, 14 (factory). Cleaner than a big switch. |
+| **Vol model as decorator over curve** (`SABRModel(YieldCurve)` with `sub_model_`) | Phase 7 | Curve ops delegate to sub-model; SABR only adds vol. Right composition for vol-on-top-of-rates. |
+| **Serialize/deserialize protocol on every model** (versioned dict, `deserialize` via registry) | Phase 2+ | Cheap state persistence + regression fixtures. |
+| **Instrument vocabulary** (`RFRSwap`, `RFRFuture`, `OvernightIndexBasisSwap`, `CrossCurrencyBasisSwapNonMTM`, `FundingIdentifier`) | Phase 2+ naming | Steal the names; matches Source II conventions. |
+
+**Do not** copy her tests (Jupyter notebooks, no assertions),
+`import *` style, 1900-line god-modules, or the lack of any README/docstrings.
+Match her scope, beat her hygiene.
+
 ---
 
 ## Current scope — Phase 0–4 (committed)
@@ -58,7 +75,7 @@ Milestone: tag `v0.1-env`.
 **Goal:** understand what QuantLib does by writing a simplified SOFR-aware
 version.
 
-Math note: `docs/math_notes/01_swap_valuation.md` — owner-written. Covers
+Math note: `docs/math_notes/01_sofr_swap.md` — owner-written. Covers
 swap PV as sum of fixed/floating leg PVs, annuity, fair rate, par
 condition. For floating leg, cover both an IBOR-style simplification
 (simple rate over period) and SOFR-style (daily-compounded geometric

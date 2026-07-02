@@ -59,8 +59,13 @@ Phases 8–10.
   functions and variables.
 - One class per header where reasonable. Implementation in `.cpp` unless
   the class is a small template.
-- `clang-format` runs before commit. `clang-tidy` warnings should be
-  addressed or explicitly suppressed with a comment explaining why.
+- `clang-format` runs before commit, using the checked-in `.clang-format`
+  at the repo root (Google base, 4-space indent, 100 columns, left-aligned
+  references, include blocks preserved). From a Developer PowerShell:
+  `clang-format -i src/**/*.hpp src/**/*.cpp tests/*.cpp examples/*.cpp`.
+  If a style knob changes, reformat the whole tree in the same commit.
+- `clang-tidy` warnings should be addressed or explicitly suppressed with
+  a comment explaining why.
 
 ## QuantLib usage policy
 

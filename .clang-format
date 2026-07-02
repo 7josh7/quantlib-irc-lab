@@ -1,0 +1,26 @@
+# Formatting contract for this repo (see AGENTS.md "Coding conventions").
+# Derived from the style of the existing Phase 0/1 code, not the other way
+# around — if you change a knob here, reformat the whole tree in the same
+# commit so history stays clean.
+#
+# Usage (Developer PowerShell, from repo root):
+#   clang-format -i src/**/*.hpp src/**/*.cpp tests/*.cpp examples/*.cpp
+BasedOnStyle: Google
+Language: Cpp
+Standard: c++20
+
+# Layout
+IndentWidth: 4
+AccessModifierOffset: -4   # 'public:' flush with the class brace
+ColumnLimit: 100
+PointerAlignment: Left     # QuantLib::Date& d, not Date &d
+DerivePointerAlignment: false
+
+# Includes: keep the existing three blocks (own header / QuantLib / std)
+# rather than letting the tool regroup them.
+IncludeBlocks: Preserve
+SortIncludes: CaseSensitive
+
+# Misc
+AllowShortFunctionsOnASingleLine: Inline
+AlwaysBreakTemplateDeclarations: Yes

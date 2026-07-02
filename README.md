@@ -148,8 +148,9 @@ IRC/
 Detailed rules for working in this repo, including AI assistants, are in
 [AGENTS.md](AGENTS.md). The two that matter most:
 
-1. **The repo owner writes the math note. AI writes code.** Never the other way
-   around.
+1. **The repo owner writes the math note and the implementation.** AI writes
+   the interface proposal, the red tests, and the post-green review — not the
+   implementation, unless explicitly asked for a given module.
 2. **No implementation lands before a math note exists** for it.
 
 ## Source Material

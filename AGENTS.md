@@ -86,10 +86,19 @@ reinvent the MC framework.
 1. Owner writes `docs/math_notes/<chapter>_<topic>.md`.
 2. AI proposes a minimal C++ interface (headers only, no implementation).
    Owner approves.
-3. AI writes the test file first (GoogleTest), based on the math note.
-4. AI writes the minimal implementation to pass tests.
-5. AI compares against QuantLib where applicable and reports the diff.
-6. Owner reviews, then commits.
+3. AI writes the test file first (GoogleTest), based on the math note,
+   plus validation-only stubs so the suite builds and runs **red**. The
+   red tests are the exercise spec; QuantLib is the answer key.
+4. **Owner writes the implementation** until the tests pass. This is a
+   C++ learning project as much as a math one — the owner fights the
+   compiler. AI implements only when the owner explicitly asks for that
+   module (Phase 1 was AI-implemented as a worked example to read).
+5. AI reviews the owner's green implementation — const-correctness,
+   unnecessary copies, idiom, error handling — and only then shows how
+   it would have written it, as a diff with explanations. Never before
+   the owner's version works.
+6. AI compares against QuantLib where applicable and reports the diff.
+7. Owner reviews, then commits.
 
 Do not skip steps. Do not bundle steps. If a step has no obvious next
 move, stop and ask.

@@ -5,9 +5,7 @@
 
 namespace irc {
 
-FixedLeg::FixedLeg(QuantLib::Schedule schedule,
-                   QuantLib::DayCounter day_counter,
-                   double notional,
+FixedLeg::FixedLeg(QuantLib::Schedule schedule, QuantLib::DayCounter day_counter, double notional,
                    double fixed_rate)
     : schedule_(std::move(schedule)),
       day_counter_(std::move(day_counter)),
@@ -25,16 +23,21 @@ FixedLeg::FixedLeg(QuantLib::Schedule schedule,
 }
 
 double FixedLeg::present_value(const YieldCurve& curve) const {
-    // TODO(step 4): fixed_rate_ * annuity(curve).  Math note §3.
-    (void)curve;
-    throw std::logic_error("FixedLeg::present_value: not implemented (Phase 1 step 4)");
+    // PV = K * annuity.  Math note §3.
+    return fixed_rate_ * annuity(curve);
 }
 
 double FixedLeg::annuity(const YieldCurve& curve) const {
-    // TODO(step 4): N * sum_i tau_i * P(t, T_i) over consecutive schedule
-    // date pairs, tau_i from day_counter_.  Math note §3 (A(t), times N).
-    (void)curve;
-    throw std::logic_error("FixedLeg::annuity: not implemented (Phase 1 step 4)");
+    // annuity = N * sum_i tau_i * P(t, T_i), payment date T_i = schedule_[i]
+    // (payment lag 0 in v1). Math note §3 A(t), scaled by the notional.
+    double sum = 0.0;
+    for (QuantLib::Size i = 1; i < schedule_.size(); ++i) {
+        const QuantLib::Date& period_start = schedule_[i - 1];
+        const QuantLib::Date& payment = schedule_[i];
+        const double tau = day_counter_.yearFraction(period_start, payment);
+        sum += tau * curve.discount(payment);
+    }
+    return notional_ * sum;
 }
 
 }  // namespace irc

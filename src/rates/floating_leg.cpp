@@ -5,11 +5,8 @@
 
 namespace irc {
 
-FloatingLeg::FloatingLeg(QuantLib::Schedule schedule,
-                         QuantLib::DayCounter day_counter,
-                         double notional,
-                         std::shared_ptr<const RateAccrual> accrual,
-                         double spread)
+FloatingLeg::FloatingLeg(QuantLib::Schedule schedule, QuantLib::DayCounter day_counter,
+                         double notional, std::shared_ptr<const RateAccrual> accrual, double spread)
     : schedule_(std::move(schedule)),
       day_counter_(std::move(day_counter)),
       notional_(notional),
@@ -30,12 +27,17 @@ FloatingLeg::FloatingLeg(QuantLib::Schedule schedule,
 }
 
 double FloatingLeg::present_value(const YieldCurve& curve) const {
-    // TODO(step 4): N * sum_i tau_i * (F_i + spread_) * P(t, T_i), with
-    // F_i = accrual_->forward_rate(curve, T_{i-1}, T_i, tau_i).
-    // Math note §2 (projected coupon PV).
-    (void)curve;
-    throw std::logic_error(
-        "FloatingLeg::present_value: not implemented (Phase 1 step 4)");
+    // PV = N * sum_i tau_i * (F_i + s) * P(t, T_i), with F_i from the
+    // injected accrual strategy. Math note §2 (projected coupon PV).
+    double pv = 0.0;
+    for (QuantLib::Size i = 1; i < schedule_.size(); ++i) {
+        const QuantLib::Date& period_start = schedule_[i - 1];
+        const QuantLib::Date& payment = schedule_[i];
+        const double tau = day_counter_.yearFraction(period_start, payment);
+        const double forward = accrual_->forward_rate(curve, period_start, payment, tau);
+        pv += tau * (forward + spread_) * curve.discount(payment);
+    }
+    return notional_ * pv;
 }
 
 }  // namespace irc

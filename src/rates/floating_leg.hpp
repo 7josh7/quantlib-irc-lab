@@ -15,11 +15,8 @@ namespace irc {
 // or daily-compounded SOFR-style).
 class FloatingLeg {
 public:
-    FloatingLeg(QuantLib::Schedule schedule,
-                QuantLib::DayCounter day_counter,
-                double notional,
-                std::shared_ptr<const RateAccrual> accrual,
-                double spread = 0.0);
+    FloatingLeg(QuantLib::Schedule schedule, QuantLib::DayCounter day_counter, double notional,
+                std::shared_ptr<const RateAccrual> accrual, double spread = 0.0);
 
     double present_value(const YieldCurve& curve) const;
 

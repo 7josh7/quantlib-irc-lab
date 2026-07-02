@@ -41,25 +41,22 @@ protected:
     const irc::FlatCurve curve_{settlement_, flat_rate_, curve_dc_};
 
     ql::Schedule annual_schedule() const {
-        return ql::Schedule(settlement_, maturity_, ql::Period(ql::Annual),
-                            calendar_, ql::ModifiedFollowing,
-                            ql::ModifiedFollowing, ql::DateGeneration::Forward,
-                            false);
+        return ql::Schedule(settlement_, maturity_, ql::Period(ql::Annual), calendar_,
+                            ql::ModifiedFollowing, ql::ModifiedFollowing,
+                            ql::DateGeneration::Forward, false);
     }
 
     irc::FixedLeg make_fixed_leg(double rate) const {
         return {annual_schedule(), leg_dc_, notional_, rate};
     }
 
-    irc::FloatingLeg make_floating_leg(
-        std::shared_ptr<const irc::RateAccrual> accrual) const {
+    irc::FloatingLeg make_floating_leg(std::shared_ptr<const irc::RateAccrual> accrual) const {
         return {annual_schedule(), leg_dc_, notional_, std::move(accrual)};
     }
 
     irc::VanillaSwap make_swap(irc::SwapSide side, double rate) const {
         return {side, make_fixed_leg(rate),
-                make_floating_leg(
-                    std::make_shared<irc::CompoundedOvernightRate>(calendar_))};
+                make_floating_leg(std::make_shared<irc::CompoundedOvernightRate>(calendar_))};
     }
 };
 
@@ -96,23 +93,19 @@ TEST_F(MiniPricerTest, FlatCurveThrowsBeforeReference) {
 // the same floating-leg PV. Tolerance is 1e-7 absolute (not the plan's
 // 1e-10): ~1250 daily factors each carry O(1e-16) rounding.
 TEST_F(MiniPricerTest, SimpleAndCompoundedStrategiesAgree) {
-    const auto simple =
-        make_floating_leg(std::make_shared<irc::SimpleForwardRate>());
-    const auto compounded = make_floating_leg(
-        std::make_shared<irc::CompoundedOvernightRate>(calendar_));
+    const auto simple = make_floating_leg(std::make_shared<irc::SimpleForwardRate>());
+    const auto compounded =
+        make_floating_leg(std::make_shared<irc::CompoundedOvernightRate>(calendar_));
 
-    EXPECT_NEAR(simple.present_value(curve_), compounded.present_value(curve_),
-                1e-7);
+    EXPECT_NEAR(simple.present_value(curve_), compounded.present_value(curve_), 1e-7);
 }
 
 // Analytic anchor: PV_flt = N * (P(T0) - P(Tn))  (math note §4).
 TEST_F(MiniPricerTest, FloatingLegTelescopesAnalytically) {
-    const auto leg =
-        make_floating_leg(std::make_shared<irc::SimpleForwardRate>());
+    const auto leg = make_floating_leg(std::make_shared<irc::SimpleForwardRate>());
     const auto schedule = annual_schedule();
-    const double expected =
-        notional_ * (curve_.discount(schedule.dates().front()) -
-                     curve_.discount(schedule.dates().back()));
+    const double expected = notional_ * (curve_.discount(schedule.dates().front()) -
+                                         curve_.discount(schedule.dates().back()));
     EXPECT_NEAR(leg.present_value(curve_), expected, 1e-8);
 }
 
@@ -124,15 +117,13 @@ TEST_F(MiniPricerTest, AnnuityMatchesManualSum) {
 
     double expected = 0.0;  // N * sum_i tau_i P(t,T_i) — math note §3
     for (std::size_t i = 1; i < schedule.size(); ++i) {
-        const double tau =
-            leg_dc_.yearFraction(schedule.dates()[i - 1], schedule.dates()[i]);
+        const double tau = leg_dc_.yearFraction(schedule.dates()[i - 1], schedule.dates()[i]);
         expected += notional_ * tau * curve_.discount(schedule.dates()[i]);
     }
     EXPECT_NEAR(leg.annuity(curve_), expected, 1e-10);
 
     // present_value = K * annuity (math note §3).
-    EXPECT_NEAR(leg.present_value(curve_), fixed_rate_ * leg.annuity(curve_),
-                1e-10);
+    EXPECT_NEAR(leg.present_value(curve_), fixed_rate_ * leg.annuity(curve_), 1e-10);
 }
 
 // --- 4. Par swap has zero NPV ----------------------------------------------
@@ -175,15 +166,12 @@ TEST_F(MiniPricerTest, MatchesQuantLibOvernightIndexedSwap) {
     ql::Settings::instance().evaluationDate() = valuation_;
 
     const ql::Handle<ql::YieldTermStructure> flat(
-        ql::ext::make_shared<ql::FlatForward>(settlement_, flat_rate_,
-                                              curve_dc_, ql::Continuous));
+        ql::ext::make_shared<ql::FlatForward>(settlement_, flat_rate_, curve_dc_, ql::Continuous));
     const auto sofr = ql::ext::make_shared<ql::Sofr>(flat);
 
-    ql::OvernightIndexedSwap ql_swap(ql::OvernightIndexedSwap::Receiver,
-                                     notional_, annual_schedule(), fixed_rate_,
-                                     leg_dc_, sofr);
-    ql_swap.setPricingEngine(
-        ql::ext::make_shared<ql::DiscountingSwapEngine>(flat));
+    ql::OvernightIndexedSwap ql_swap(ql::OvernightIndexedSwap::Receiver, notional_,
+                                     annual_schedule(), fixed_rate_, leg_dc_, sofr);
+    ql_swap.setPricingEngine(ql::ext::make_shared<ql::DiscountingSwapEngine>(flat));
 
     const auto ours = make_swap(irc::SwapSide::Receiver, fixed_rate_);
 

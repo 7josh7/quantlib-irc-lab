@@ -10,9 +10,7 @@ namespace irc {
 // the leg accrual day counter (Act/360) — see impl note §1.
 class FlatCurve final : public YieldCurve {
 public:
-    FlatCurve(QuantLib::Date reference,
-              double zero_rate,
-              QuantLib::DayCounter day_counter);
+    FlatCurve(QuantLib::Date reference, double zero_rate, QuantLib::DayCounter day_counter);
 
     double discount(const QuantLib::Date& d) const override;
     QuantLib::Date reference_date() const override;

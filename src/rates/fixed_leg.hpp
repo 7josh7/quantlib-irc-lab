@@ -10,9 +10,7 @@ namespace irc {
 //   CF_i = N * K * tau_i,   PV = N * K * sum_i tau_i P(t,T_i).
 class FixedLeg {
 public:
-    FixedLeg(QuantLib::Schedule schedule,
-             QuantLib::DayCounter day_counter,
-             double notional,
+    FixedLeg(QuantLib::Schedule schedule, QuantLib::DayCounter day_counter, double notional,
              double fixed_rate);
 
     // PV = fixed_rate * annuity(curve).

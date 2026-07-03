@@ -39,5 +39,8 @@ docs/ref/
 data/scratch/
 output/*.csv
 
+# Personal learning notes (not part of the project docs)
+docs/quantlib_cheatsheet.md
+
 # Logs
 *.log

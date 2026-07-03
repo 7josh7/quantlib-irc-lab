@@ -15,6 +15,14 @@ public:
 
     virtual double forward_rate(const YieldCurve& curve, const QuantLib::Date& start,
                                 const QuantLib::Date& end, double year_fraction) const = 0;
+
+protected:
+    // rule of zero
+    RateAccrual() = default;
+    RateAccrual(const RateAccrual&) = default;
+    RateAccrual& operator=(const RateAccrual&) = default;
+    RateAccrual(RateAccrual&&) noexcept = default;
+    RateAccrual& operator=(RateAccrual&&) noexcept = default;
 };
 
 // IBOR-style simple forward:  F = (P(start)/P(end) - 1) / tau.

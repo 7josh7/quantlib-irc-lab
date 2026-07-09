@@ -167,4 +167,7 @@ Phase mapping in [docs/sources.md](docs/sources.md).
 - `note/III. Volatility Modeling.pdf` — Bachelier, Dupire local vol, SABR (Hagan formula, ATM parameterization, smile-risk Greeks, Bartlett's delta)
 - `note/IV. Breaking Down RFR Modeling.pdf` — backward-looking RFR caplets, time-decay SABR, bottom-up basket aggregation
 - `IRC.pdf` — Lesniewski, *Interest Rate and Credit Models* (Hull–White, LMM, Bermudan/LSM, CCR depth)
+- `note/Interest Rate Models — Theory and Practice.pdf` — Brigo & Mercurio (Springer 2006); back-half theory back-stop: short-rate models (Ch.3–4), LMM/LSM + calibration (Ch.6–8), SABR (Ch.11), intensity/CDS (Ch.21–22). LIBOR-era — model theory, not SOFR conventions
+- `note/Monte Carlo Methods in Financial Engineering.pdf` — Glasserman (Springer 2003); MC methodology: RNG/paths (Ch.2–3), variance reduction (Ch.4), discretization (Ch.6), Longstaff–Schwartz (Ch.8), VaR/exposure (Ch.9)
+- `note/cpp-design-patterns-and-derivatives-pricing.pdf` — Joshi, *C++ Design Patterns and Derivatives Pricing* (2nd ed.); code architecture, cross-cutting (port the patterns, modernize the pre-C++11 idioms)
 - QuantLib — https://www.quantlib.org/

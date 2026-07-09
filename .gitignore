@@ -31,6 +31,10 @@ desktop.ini
 # PDFs (source material, reference books — see README "Source Material")
 *.pdf
 
+# Reference material (course notes + books — redistribution rights unclear,
+# see README "Source Material"). Includes the distilled markdown notes.
+docs/ref/
+
 # Generated CSVs / scratch data
 data/scratch/
 output/*.csv

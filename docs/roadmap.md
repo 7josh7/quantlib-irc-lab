@@ -22,22 +22,21 @@ Phase 2 onward**, not measured for the first time at Phase 8. Phase 8's job
 is to *confirm* the target has held and backfill residual gaps, not to
 establish it.
 
-## Prior art to port from QuantBricker
+## Implementation patterns to port
 
-Reference: [Tiffany-YQY/QuantBricker](https://github.com/Tiffany-YQY/QuantBricker)
-(Python, Phases 0–7 scope, no docs/tests). Patterns worth stealing:
+These cross-cutting patterns are candidates for the C++ architecture:
 
 | Pattern | Where | Notes |
 |---|---|---|
-| **Jacobian model→market risk propagation** (`model_jacobian`, `risk_postprocess`, per-component `..._gradient_wrt_state`) | **Phase 2 — promote from stretch to deliverable** | Her cleanest idea. Every component exposes analytic gradient w.r.t. its state; the model composes them into a Jacobian, then post-multiplies gradients into market-quote space (Source II §3.4). Match this. |
+| **Jacobian model→market risk propagation** (`model_jacobian`, `risk_postprocess`, per-component `..._gradient_wrt_state`) | **Phase 2 — promote from stretch to deliverable** | Every component exposes analytic gradient w.r.t. its state; the model composes them into a Jacobian, then post-multiplies gradients into market-quote space (Source II §3.4). Match this. |
 | **Registry / plugin architecture** (`ModelDeserializerRegistry`, `IndexRegistry`, `ProductBuilderRegistry`) | Phase 2 onward | Self-registering pricers, curves, products. CPP Ch.10, 14 (factory). Cleaner than a big switch. |
 | **Vol model as decorator over curve** (`SABRModel(YieldCurve)` with `sub_model_`) | Phase 7 | Curve ops delegate to sub-model; SABR only adds vol. Right composition for vol-on-top-of-rates. |
 | **Serialize/deserialize protocol on every model** (versioned dict, `deserialize` via registry) | Phase 2+ | Cheap state persistence + regression fixtures. |
-| **Instrument vocabulary** (`RFRSwap`, `RFRFuture`, `OvernightIndexBasisSwap`, `CrossCurrencyBasisSwapNonMTM`, `FundingIdentifier`) | Phase 2+ naming | Steal the names; matches Source II conventions. |
+| **Instrument vocabulary** (`RFRSwap`, `RFRFuture`, `OvernightIndexBasisSwap`, `CrossCurrencyBasisSwapNonMTM`, `FundingIdentifier`) | Phase 2+ naming | Use these names; matches Source II conventions. |
 
-**Do not** copy her tests (Jupyter notebooks, no assertions),
+**Do not** copy notebook-style tests without assertions,
 `import *` style, 1900-line god-modules, or the lack of any README/docstrings.
-Match her scope, beat her hygiene.
+Keep the scope auditable and maintain stronger hygiene.
 
 ---
 
@@ -179,7 +178,7 @@ Prerequisites (from Phase 2, reused not rebuilt):
 Modules:
 
 - `src/instruments/xccy_basis_swap.hpp` — non-MTM xCcy basis swap
-  (name per QuantBricker's `CrossCurrencyBasisSwapNonMTM` vocabulary; MTM
+  (using `CrossCurrencyBasisSwapNonMTM` vocabulary; MTM
   reset variant explicitly out of scope for v1).
 - `src/curves/fx_forward_chain.hpp` — spot + forward points → implied
   FX forwards; covered-interest-parity utilities (II §3.2.5).
@@ -370,7 +369,7 @@ Modules:
 - `src/vol/rfr_caplet.hpp` — time-decay factor + time-decay SABR (IV §3);
   price a backward-looking compounded-RFR caplet.
 - `src/vol/vol_surface.hpp` — SABR-per-expiry **decorator over the Phase 2
-  curve** (QuantBricker's `SABRModel(YieldCurve)` pattern: curve ops
+  curve** (decorator pattern: curve ops
   delegate to the sub-model, SABR only adds vol — CPP Ch.5).
 - `examples/07_sabr_swaption_smile.cpp` — calibrate SABR to a synthetic
   swaption smile, write `output/sabr_smile.csv` (strike, market vol, SABR

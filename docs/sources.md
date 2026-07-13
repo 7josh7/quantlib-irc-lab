@@ -1,23 +1,27 @@
 # Source mapping
 
-Eight source PDFs: **seven math/finance references** (the four-part series
+Nine source works: **seven math/finance references** (the four-part series
 I–IV, IRC, plus two textbook back-stops — **BM** for rate-model theory and
-**GLA** for Monte Carlo methodology) and **one code-architecture reference**
-(CPP). The math references map to phases by topic (table below); CPP is
-cross-cutting — it informs how the C++ is structured, not what the math is.
+**GLA** for Monte Carlo methodology) and **two implementation references**:
+**CPP** for small pricing-library design and **IQ** for QuantLib architecture
+and utilities. The finance references determine what to compute; CPP and IQ
+inform how to structure or benchmark the implementation.
+Local working copies and extracted Markdown live under `docs/ref/`; that
+directory is intentionally ignored because redistribution rights are unclear.
 
 ## Sources
 
 | ID | Title | Role |
 |----|-------|------|
-| **IRC** | Lesniewski, *Interest Rate and Credit Models* (`IRC.pdf`) | Single-author full-arc text. Spine for back-half phases (LMM, Bermudan/LSM, CCR depth). |
-| **I** | *Modern Pricing Theory in Practice* (`note/I. ...pdf`) | Foundations: martingale measures, **CSA-collateralized pricing**, xVA decomposition (CVA/DVA/FVA/MVA/KVA), CVA integral with EE/PD/LGD, **Monte Carlo regression** (basis functions + least-squares). |
-| **II** | *Yield Curve And All That* (`note/II. ...pdf`) | Curve construction, modern: simple vs compound rates, multi-curve, **SOFR-centric bootstrap with futures + OIS** (worked Table 1), cross-currency basis swaps, FX-forward currency chains, **Jacobian risk representation**, **PCA hedging and eigen-scenarios** (worked numerical example). |
-| **III** | *Volatility Modeling* (`note/III. ...pdf`) | Vol theory: Bachelier, Dupire local vol, **SABR** (Hagan formula, ATM parameterization, smile-risk Greeks, Bartlett's modified delta). |
-| **IV** | *Breaking Down RFR Modeling* (`note/IV. ...pdf`) | RFR-specific vol: **backward-looking vs forward-looking caplets**, **time-decay SABR** for compounded rates, bottom-up basket aggregation. |
-| **BM** | Brigo & Mercurio, *Interest Rate Models — Theory and Practice (With Smile, Inflation and Credit)*, 2nd ed. (Springer 2006) (`note/[Springer 2006] Interest Rate Models ...pdf`) | Deep theory back-stop for the back half. Cap/floor & swaption Black/Bachelier formulas (Ch.1); **short-rate models** — Vasicek, CIR, Hull–White, CIR++ fit to the initial curve (Ch.3), G2++ two-factor (Ch.4); the **LIBOR/swap market models** and calibration (Ch.6–7), MC tests of LFM approximations (Ch.8); **SABR as a stochastic-vol extension** (Ch.11); counterparty risk + intensity/CDS models (Ch.21–22). Rigorous and rates-native — complements IRC on model depth. **LIBOR-era (2006): take the model theory, not the pre-SOFR curve plumbing.** |
-| **GLA** | Glasserman, *Monte Carlo Methods in Financial Engineering* (Springer 2003) (`note/Monte_Carlo_Methods_In_Financial_Enginee.pdf`) | **Numerical methodology, not instruments.** The MC reference: RNG + normal-vector generation (Ch.2), Brownian path / bridge construction (Ch.3), variance reduction (Ch.4), quasi-MC (Ch.5), SDE discretization — Euler / second-order (Ch.6), MC Greeks (Ch.7), **American-option pricing incl. regression-based Longstaff–Schwartz and duality upper bounds** (Ch.8 §8.6–8.7), loss probabilities / VaR / credit risk (Ch.9). Pairs with CPP: **GLA is what the numerics do, CPP is how to structure the classes.** |
-| **CPP** | Joshi, *C++ Design Patterns and Derivatives Pricing*, 2nd ed. (`note/cpp-design-patterns-and-derivatives-pricing.pdf`) | **Code architecture, not math.** Design patterns for a pricing library: open–closed payoff/curve hierarchy (Ch.2–3), bridge + virtual constructor + parameters class (Ch.4), strategy + decoration + statistics gatherer (Ch.5), a random-numbers class (Ch.6), a templatized exotics/MC engine (Ch.7), trees (Ch.8), solver function-objects (Ch.9), the factory (Ch.10, 14), exception-safe smart-pointer idioms (Ch.13), decoupling/levelization (Ch.16). Equity/FX/MC-flavored and pre-C++11 — **port the patterns, modernize the idioms**. |
+| **IRC** | Lesniewski, *Interest Rate and Credit Models* (`docs/ref/IRC.pdf`) | Single-author full-arc text. Spine for back-half phases (LMM, Bermudan/LSM, CCR depth). |
+| **I** | *Modern Pricing Theory in Practice* (`docs/ref/i-modern-pricing-theory-in-practice.md`) | Foundations: martingale measures, **CSA-collateralized pricing**, xVA decomposition (CVA/DVA/FVA/MVA/KVA), CVA integral with EE/PD/LGD, **Monte Carlo regression** (basis functions + least-squares). |
+| **II** | *Yield Curve And All That* (`docs/ref/ii-yield-curve-and-all-that.md`) | Curve construction, modern: simple vs compound rates, multi-curve, **SOFR-centric bootstrap with futures + OIS** (worked Table 1), cross-currency basis swaps, FX-forward currency chains, **Jacobian risk representation**, **PCA hedging and eigen-scenarios** (worked numerical example). |
+| **III** | *Volatility Modeling* (`docs/ref/iii-volatility-modeling.md`) | Vol theory: Bachelier, Dupire local vol, **SABR** (Hagan formula, ATM parameterization, smile-risk Greeks, Bartlett's modified delta). |
+| **IV** | *Breaking Down RFR Modeling* (`docs/ref/iv-breaking-down-risk-free-rate-rfr-modeling.md`) | RFR-specific vol: **backward-looking vs forward-looking caplets**, **time-decay SABR** for compounded rates, bottom-up basket aggregation. |
+| **BM** | Brigo & Mercurio, *Interest Rate Models — Theory and Practice (With Smile, Inflation and Credit)*, 2nd ed. (Springer 2006) (`docs/ref/[Springer 2006] Interest Rate Models Theory and Practice With Smile, Inflation and Credit.pdf`) | Deep theory back-stop for the back half. Cap/floor & swaption Black/Bachelier formulas (Ch.1); **short-rate models** — Vasicek, CIR, Hull–White, CIR++ fit to the initial curve (Ch.3), G2++ two-factor (Ch.4); the **LIBOR/swap market models** and calibration (Ch.6–7), MC tests of LFM approximations (Ch.8); **SABR as a stochastic-vol extension** (Ch.11); counterparty risk + intensity/CDS models (Ch.21–22). Rigorous and rates-native — complements IRC on model depth. **LIBOR-era (2006): take the model theory, not the pre-SOFR curve plumbing.** |
+| **GLA** | Glasserman, *Monte Carlo Methods in Financial Engineering* (Springer 2003) (`docs/ref/Monte_Carlo_Methods_In_Financial_Enginee.pdf`) | **Numerical methodology, not instruments.** The MC reference: RNG + normal-vector generation (Ch.2), Brownian path / bridge construction (Ch.3), variance reduction (Ch.4), quasi-MC (Ch.5), SDE discretization — Euler / second-order (Ch.6), MC Greeks (Ch.7), **American-option pricing incl. regression-based Longstaff–Schwartz and duality upper bounds** (Ch.8 §8.6–8.7), loss probabilities / VaR / credit risk (Ch.9). Pairs with CPP: **GLA is what the numerics do, CPP is how to structure the classes.** |
+| **CPP** | Joshi, *C++ Design Patterns and Derivatives Pricing*, 2nd ed. (`docs/ref/cpp-design-patterns-and-derivatives-pricing.pdf`) | **Code architecture, not math.** Design patterns for a pricing library: open–closed payoff/curve hierarchy (Ch.2–3), bridge + virtual constructor + parameters class (Ch.4), strategy + decoration + statistics gatherer (Ch.5), a random-numbers class (Ch.6), a templatized exotics/MC engine (Ch.7), trees (Ch.8), solver function-objects (Ch.9), the factory (Ch.10, 14), exception-safe smart-pointer idioms (Ch.13), decoupling/levelization (Ch.16). Equity/FX/MC-flavored and pre-C++11 — **port the patterns, modernize the idioms**. |
+| **IQ** | Ballabio, *Implementing QuantLib* (`docs/ref/IMPLEMENTING QUANTLIB.pdf`) | **QuantLib architecture and utilities.** Instrument/pricing-engine separation and swap example (Ch.2); dates, calendars, day counts, schedules, quotes, rates, and indexes (App. A); interpolation, one-dimensional solvers, optimizers, statistics, and linear algebra; smart pointers/handles, explicit error reporting, and Observer/Visitor patterns. Use it to understand the oracle and conventions, not to copy QuantLib wholesale. |
 
 ## Rule of priority
 
@@ -47,32 +51,33 @@ governs the class design.
 
 | Phase | Primary | Secondary |
 |-------|---------|-----------|
-| 0 — Env, SOFR hello-swap | II §3.3.1 (SOFR curve calibration), II §3.2.2 (IRS) | IRC Ch.1 |
-| 1 — Mini swap pricer | II §3.2.2, II §6.1 (day count) | IRC Ch.1 |
-| 2 — Curve bootstrap + DV01 | II §3.3 (multi-curve), II §3.4 (Jacobian risk) | IRC Ch.1 |
-| 4a (optional, post-MVP) — xCcy / foreign-collateralized discounting | II §3.2.3–3.2.5 (basis, xCcy non-MTM, FX chain), II §3.3.2–3.3.3 (forward via basis, foreign-collateral curves) | I §2 (collateralized pricing) |
-| 4 — Risk report (DV01/KRD/scenarios + PCA) | II §4.2–4.3 (PCA hedging + eigen-scenarios), II §5 (steepener) | — |
+| 0 — Environment + legacy QuantLib scaffold | IQ Ch.2 and App. A; II §3.2.2 | IRC Lecture 1 |
+| 1 — Mini swap pricer | II §2.2, §3.2.2, §6.1 | I §2; IQ Ch.2 swap/engine design; IRC Lecture 1 |
+| 2 — SOFR curve bootstrap + quote DV01 | II §3.3.1 | IRC Lecture 1 curve stripping; IQ quotes/interpolation/solvers; GLA Ch.7 finite differences; II §3.4 deferred Jacobian |
+| 3 — Portfolio risk report | II §3.4 and §5 | IRC Lecture 14 sensitivity risk; II §4.2–4.3 optional PCA; GLA Ch.9 risk context |
+| 4 (optional, post-MVP) — xCcy / foreign-collateralized discounting | II §3.2.3–3.2.5 (basis, xCcy non-MTM, FX chain), II §3.3.2–3.3.3 (forward via basis, foreign-collateral curves) | I §2 (collateralized pricing) |
 | 4.5 (optional) — xVA awareness | I §2 (CSA replication), I §3.1 (xVA decomposition), I §3.2 (CVA) | — |
-| 5 — CDS, survival curve | I §3.2 (CVA framework), IRC Ch.2–3 (CDS depth) | BM Ch.21–22 (intensity / CDS models) |
-| 6 — Hull–White | IRC Ch.10 | BM Ch.3–4 (short-rate models, CIR++ curve fit, G2++) |
-| 7 — SABR / swaption / RFR caplet | III §4.3–4.8 (SABR + smile Greeks), IV §3 (time-decay SABR for RFR) | IRC Ch.8–9; BM Ch.1 & Ch.11 (Black/Bachelier formulas; SABR) |
-| 8 — LMM | IRC Ch.11, BM Ch.6–7 (LFM/LSM + calibration) | GLA Ch.2–6 (MC methodology); BM Ch.8; III §4.5 (parameterization) |
-| 9 — LSM Bermudan | IRC Ch.12 (optimal stopping), I §3.4 (MC regression), GLA Ch.8 §8.6 (Longstaff–Schwartz) | BM Ch.8 (LFM MC tests) |
+| 5 — CDS, survival curve | I §3.2, IRC Lectures 2–3 | BM Ch.21–22 |
+| 6 — Hull–White | IRC Lecture 10 | BM Ch.3–4; GLA §3.3 and Ch.6 for simulation/discretization |
+| 7 — SABR / swaption / RFR caplet | III §4.3–4.8, IV §3–4 | IRC Lectures 5–6 and 14; BM Ch.10–11 |
+| 8 — LMM | IRC Lecture 11, BM Ch.6–7 | BM Ch.8; GLA §3.7 and Ch.4–6; CPP Ch.5–7 |
+| 9 — LSM Bermudan | IRC Lecture 12, I §3.4, GLA §8.6–8.7 | BM §13.15 |
 | 10 — CCR / exposure / CVA | IRC Ch.15, I §3.2–3.3 (EE, MPoR, nested-MC critique) | GLA Ch.9 (VaR/PFE, credit risk) |
 
-## Where CPP applies (code architecture, cross-cutting)
+## Where the implementation references apply
 
-CPP is deliberately left out of the phase table above — it's not a per-phase
-*math* source. It applies wherever a phase needs a non-trivial class design:
+CPP and IQ do not authorize a formula; they guide C++ structure and QuantLib
+usage after the relevant owner math note establishes the finance.
 
-| Phase / area | CPP material |
-|--------------|--------------|
-| 1 — Mini pricer | Open–closed `yield_curve` base + flat impl (Ch.2–3); floating-leg simple vs daily-compounded **Strategy** (Ch.5); bridge + parameters class (Ch.4). |
-| 4 — Scenario engine | Deterministic shocks + PCA eigen-scenarios behind one interface = **Strategy** (Ch.5). |
-| 6 — Hull–White | Trinomial-tree class design (Ch.8). |
-| 7 — Implied vol / SABR calibration | Solver via **function objects** + Newton–Raphson (Ch.9). |
-| Roadmap-only — hand-rolled LMM / LSM Monte Carlo | **Most valuable here.** MC framework design: RNG class (Ch.6), statistics gatherer (Ch.5), exotics/path-generation engine (Ch.7), templatized factory (Ch.10, 14). |
-| Throughout | Exception safety + smart pointers (Ch.13); header/levelization decoupling (Ch.16). |
+| Phase / area | Implementation material |
+|--------------|-------------------------|
+| 0–1 — QuantLib conventions and mini pricer | IQ Ch.2 instrument/engine split and swap example; IQ App. A dates, calendars, day counts, schedules, rates, and indexes. CPP Ch.2–5 for the open–closed curve and accrual strategies. |
+| 2 — Bootstrap + bump risk | IQ App. A quotes, interpolation, one-dimensional solvers, handles, and errors. CPP Ch.9 solver function-objects and Ch.16 levelization. Keep the model core hand-rolled and use QuantLib as the answer key. |
+| 3 — Scenario engine | CPP Ch.5 Strategy/statistics ideas; IQ Observer/handles help explain QuantLib quote bumps, while the hand-rolled MVP can use explicit immutable scenarios. |
+| 6 — Hull–White | CPP Ch.8 tree design; IQ pricing-engine separation for the QuantLib benchmark. |
+| 7 — Implied vol / SABR calibration | CPP Ch.9 solver function-objects; IQ optimizers and error reporting. |
+| 8–9 — LMM / LSM Monte Carlo | CPP Ch.5–7 for RNG/statistics/path-engine boundaries; GLA governs the numerical method. Use QuantLib's MC infrastructure as required by `AGENTS.md`. |
+| Throughout | CPP Ch.13 and Ch.16 for exception safety/decoupling; IQ handles and explicit error reporting. Modernize all pre-C++11 idioms. |
 
 ## What each source does NOT cover
 
@@ -94,6 +99,9 @@ CPP is deliberately left out of the phase table above — it's not a per-phase
 - **CPP** covers no financial math at all, and its worked examples are
   equity/FX/MC (Black–Scholes, Asian options), not rates. Take the design,
   not the instruments — and modernize the pre-C++11 idioms.
+- **IQ** documents QuantLib design and supporting utilities; it is not a
+  current market-conventions source and not a mandate to reproduce QuantLib's
+  inheritance, lazy evaluation, or Observer machinery in this small engine.
 
 ## Citation discipline
 

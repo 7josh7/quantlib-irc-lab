@@ -5,30 +5,40 @@ engine: SOFR curve construction, swap and CDS pricing, vol modeling, short-rate
 models, and risk analytics. Each module is backed by math notes, unit tests,
 and a QuantLib benchmark where possible.
 
-Two source sets: a modern four-part series (foundations, curves, vol, RFR) in
-`note/`, and Andrew Lesniewski's *Interest Rate and Credit Models* (`IRC.pdf`).
-The four-part series is primary for Phases 0–7 (it's post-LIBOR and covers
-SOFR conventions, xVA, PCA, RFR caplets); IRC is primary for Phases 8–10 (LMM,
-Bermudan/LSM, deep CCR). See [docs/sources.md](docs/sources.md) for the full
-mapping.
+The reference spine is a modern four-part series (foundations, curves, vol,
+RFR) plus Lesniewski's *Interest Rate and Credit Models*. Brigo–Mercurio and
+Glasserman provide model-theory and numerical back-stops; Joshi and Ballabio's
+*Implementing QuantLib* provide C++/library-design context. Local working copies
+live in `docs/ref/`. See [docs/sources.md](docs/sources.md) for the complete
+nine-source phase mapping and rules of priority.
 
-This is a learning and portfolio project. It is not trying to be a complete
-risk system. The pacing is honest: Phase 0-4 is the Month-1 MVP commitment,
-and everything past that is roadmap-only until the MVP works.
+This is a learning and portfolio project, not a production risk system. The
+MVP is Phases 0–3: environment, mini pricer, SOFR curve + quote DV01, and a
+deterministic portfolio risk report. Phase 4 and later work does not begin
+until that MVP is reproducible.
 
 ## Status
 
-Phase 0: environment setup. QuantLib hello-swap example and smoke test build.
+| Phase | State | Evidence / next gate |
+|---|---|---|
+| 0 — Environment | Implementation complete | MSVC/CMake/vcpkg build, legacy QuantLib swap scaffold, GoogleTest wiring; no standalone `v0.1-env` tag was retained |
+| 1 — Mini pricer | Implementation complete | 12 green tests, analytic checks, QuantLib SOFR OIS comparison, tag `v0.2-mini-pricer`; owner math-note cleanup remains |
+| 2 — SOFR curve + quote DV01 | Current | Owner completes `02_curve_bootstrapping.md` before interfaces, red tests, or implementation |
+| 3 — Portfolio risk report | Planned | Produces the four MVP CSVs after Phase 2 is green |
+
+Automated line-coverage measurement is not configured yet; the current
+coverage percentage is unknown. Phase 2 adds the first coverage report.
 
 See [docs/roadmap.md](docs/roadmap.md) for the full plan.
 
-## Month-1 MVP
+## MVP contract
 
-By end of Week 4, this command must produce four CSVs from sample inputs:
+When Phase 3 is complete, this command must produce four CSVs from pinned sample
+inputs:
 
 ```powershell
 cmake --build "$env:USERPROFILE\irc-build" --config Release
-& "$env:USERPROFILE\irc-build\Release\04_swap_portfolio_risk.exe"
+& "$env:USERPROFILE\irc-build\Release\03_swap_portfolio_risk.exe"
 ```
 
 Outputs:
@@ -40,8 +50,13 @@ output/dv01_report.csv      DV01 and key-rate durations (2Y/5Y/10Y)
 output/scenario_pnl.csv     parallel +/-25bp, steepener, flattener P&L
 ```
 
-Plus: passing `ctest`, README build instructions that work from a clean
-clone, and three owner-written math notes in `docs/math_notes/`.
+PCA eigen-scenarios from Source II §§4.2–4.3 are a post-MVP stretch and may be
+added as separately tagged rows in `scenario_pnl.csv`; they do not gate
+`v1.0-mvp`.
+
+The MVP also requires passing `ctest`, build instructions that work from a
+clean clone, and three completed owner-written math notes in
+`docs/math_notes/`.
 
 ## Tech Stack
 
@@ -60,9 +75,9 @@ Prerequisites:
 - CMake from Visual Studio or on PATH
 - vcpkg from Visual Studio or a standalone clone
 
-Use **Developer PowerShell for VS 2022**. Because this repo lives under Google
-Drive, keep the build directory outside the synced folder; otherwise Ninja or
-vcpkg can fail on file timestamp checks.
+Use **Developer PowerShell for VS 2022**. Keep the build directory outside the
+source tree; this avoids build clutter and also avoids timestamp problems if a
+clone happens to live in a synced folder.
 
 If using the Visual Studio bundled vcpkg:
 
@@ -70,7 +85,7 @@ If using the Visual Studio bundled vcpkg:
 $env:VCPKG_ROOT = "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\vcpkg"
 ```
 
-From the repo root (`IRC/`):
+From the repository root (`quantlib-irc-lab/`):
 
 ```powershell
 cmake -S . -B "$env:USERPROFILE\irc-build" `
@@ -103,7 +118,7 @@ The preset writes build output to:
 C:\Users\<you>\irc-build
 ```
 
-Expected Phase 0 example output:
+Expected output from the retained Phase 0 **legacy LIBOR scaffold**:
 
 ```text
 Valuation date = May 23rd, 2026
@@ -115,32 +130,27 @@ Fair fixed rate = 0.040087
 
 ## Repo Layout
 
-Intentionally slim. New directories are added only when their phase starts; no
-empty `lmm/` or `cva/` placeholders. See `docs/roadmap.md` for when each gets
-added.
+The current repository is intentionally slim. Planned `data/`, `curves/`,
+`risk/`, and `output/` directories are added only when their phase begins.
 
 ```text
-IRC/
+quantlib-irc-lab/
   CMakeLists.txt
+  CMakePresets.json
   vcpkg.json
   README.md
   AGENTS.md
-  IRC.pdf
   docs/
     roadmap.md
+    sources.md
+    impl_notes/
     math_notes/
-  data/
-    market/
-    trades/
+    ref/                    local source material; ignored by git
   src/
     core/
-    curves/
     rates/
-    risk/
-    ql_examples/
   tests/
   examples/
-  output/
 ```
 
 ## Operating Rules
@@ -149,26 +159,29 @@ Detailed rules for working in this repo, including AI assistants, are in
 [AGENTS.md](AGENTS.md). The two that matter most:
 
 1. **The repo owner writes the math note and the implementation.** AI writes
-   the interface proposal, the red tests, and the post-green review — not the
-   implementation, unless explicitly asked for a given module.
+   the interface proposal, the red tests, and the post-green review—not the
+   implementation, unless explicitly asked for a given module. Phase 1 is the
+   documented worked-example exception.
 2. **No implementation lands before a math note exists** for it.
 
 ## Source Material
 
-> **Note:** the PDFs listed below are **not committed to this repo** — they
-> are course-note style materials whose redistribution rights are unclear.
-> If you're following along, obtain your own copies and place them at the
-> paths indicated. The repo's code, math notes, and roadmap stand on their
-> own; the PDFs are reference.
+> **Note:** the reference works listed below are **not committed to this
+> repo**—their redistribution rights are unclear.
+> If you're following along, obtain your own copies and place them under
+> `docs/ref/`. That directory, including extracted Markdown working copies, is
+> ignored by git. The committed code, owner math notes, source map, and roadmap
+> should stand on their own.
 
 Phase mapping in [docs/sources.md](docs/sources.md).
 
-- `note/I. Modern Pricing Theory in Practice.pdf` — foundations, CSA-collateralized pricing, xVA (CVA/DVA/FVA/MVA/KVA), MC regression
-- `note/II. Yield Curve And All That.pdf` — multi-curve construction, SOFR-centric bootstrap, xCcy, Jacobian risk, PCA hedging/eigen-scenarios
-- `note/III. Volatility Modeling.pdf` — Bachelier, Dupire local vol, SABR (Hagan formula, ATM parameterization, smile-risk Greeks, Bartlett's delta)
-- `note/IV. Breaking Down RFR Modeling.pdf` — backward-looking RFR caplets, time-decay SABR, bottom-up basket aggregation
-- `IRC.pdf` — Lesniewski, *Interest Rate and Credit Models* (Hull–White, LMM, Bermudan/LSM, CCR depth)
-- `note/Interest Rate Models — Theory and Practice.pdf` — Brigo & Mercurio (Springer 2006); back-half theory back-stop: short-rate models (Ch.3–4), LMM/LSM + calibration (Ch.6–8), SABR (Ch.11), intensity/CDS (Ch.21–22). LIBOR-era — model theory, not SOFR conventions
-- `note/Monte Carlo Methods in Financial Engineering.pdf` — Glasserman (Springer 2003); MC methodology: RNG/paths (Ch.2–3), variance reduction (Ch.4), discretization (Ch.6), Longstaff–Schwartz (Ch.8), VaR/exposure (Ch.9)
-- `note/cpp-design-patterns-and-derivatives-pricing.pdf` — Joshi, *C++ Design Patterns and Derivatives Pricing* (2nd ed.); code architecture, cross-cutting (port the patterns, modernize the pre-C++11 idioms)
+- `docs/ref/i-modern-pricing-theory-in-practice.md` — foundations, collateralized pricing, xVA, and MC regression
+- `docs/ref/ii-yield-curve-and-all-that.md` — SOFR bootstrap, multi-curve/xCcy construction, Jacobian risk, PCA, and curve scenarios
+- `docs/ref/iii-volatility-modeling.md` — Bachelier, Dupire local vol, SABR, and smile-risk Greeks
+- `docs/ref/iv-breaking-down-risk-free-rate-rfr-modeling.md` — backward-looking RFR caplets, time-decay SABR, and basket aggregation
+- `docs/ref/IRC.pdf` — Lesniewski, *Interest Rate and Credit Models* (Hull–White, LMM, Bermudan/LSM, CCR)
+- `docs/ref/[Springer 2006] Interest Rate Models Theory and Practice With Smile, Inflation and Credit.pdf` — Brigo & Mercurio; model-theory back-stop, not SOFR conventions
+- `docs/ref/Monte_Carlo_Methods_In_Financial_Enginee.pdf` — Glasserman; Monte Carlo numerics
+- `docs/ref/cpp-design-patterns-and-derivatives-pricing.pdf` — Joshi; code architecture with pre-C++11 idioms modernized
+- `docs/ref/IMPLEMENTING QUANTLIB.pdf` — Ballabio; QuantLib instruments/engines, conventions, quotes, interpolation, solvers, handles, and design patterns
 - QuantLib — https://www.quantlib.org/

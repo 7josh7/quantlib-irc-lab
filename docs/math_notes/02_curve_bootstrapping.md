@@ -94,17 +94,6 @@ The instrument specifications used are summarized below.
 
 
 ## Calibration Equations and Bootstrap Algorithm
-- Write the equation that links a futures-implied rate to curve discount factors
-- Write the par swap equation
-- Fixed-leg PV
-- Floating-leg PV
-- Par-rate condition
-- Inputs
-- Initial node / anchor
-- Sequential solving process
-- How each quote determines the next curve node
-- Solver choice and tolerances
-- Failure cases
 
 Ignoring the futures convexity adjustment, we identify this rate with the
 generalized forward compounded-SOFR rate:
@@ -402,9 +391,6 @@ $$
 For this phase, we set each OIS pillar to its last relevant date, including its final payment delay. Then disable extrapolation beyond the final calibrated pillar and throw an informative error for $T>L_{\max}$.
 
 ## Repricing Diagnostics
-- Reprice each calibration instrument
-- Define repricing error
-- State expected tolerance
 
 Define every residual in decimal-rate units:
 $$
@@ -422,13 +408,6 @@ $$
 $$
 
 ## DV01 / Bump-and-Reprice
-- What gets bumped
-- Parallel 1 bp bump vs quote-level bump
-- PV change convention
-- Expected sign intuition
-- Difference between curve DV01 and market quote DV01, if relevant
-
-
 
 ### Setup and notation
 
@@ -629,6 +608,30 @@ model mismatch.
 
 
 
+
+## Inputs / Outputs
+
+Inputs (exact file schemas and pinned values live in the implementation
+note, `docs/impl_notes/02_curve_bootstrap.md` §1a):
+
+- valuation date (a business day; every futures contract fully forward in
+  Phase 2 — the partially accrued case is documented above but deferred);
+- futures quotes: contract id, IMM reference-quarter start/end dates, price
+  $Q_m$;
+- OIS quotes: tenor, par rate $S_m$;
+- conventions: calendars, day counts (curve Act/365F, accrual Act/360),
+  spot lag, payment delay, business-day rule, interpolation choice.
+
+Outputs:
+
+- calibrated pillar set $(L_m,\ \log P^{\mathrm{SOFR}}(0,L_m))$ plus the
+  fixed anchor;
+- discount factors at any date within the calibrated domain (no
+  extrapolation);
+- forward compounded-SOFR rates over arbitrary in-domain periods;
+- repricing residuals $\epsilon_m$;
+- DV01 report per calibration instrument, in currency units, under the sign
+  convention stated above.
 
 ## Assumptions
 - No futures convexity adjustment

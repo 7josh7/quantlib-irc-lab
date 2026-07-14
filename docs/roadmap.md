@@ -52,7 +52,8 @@ phase must use every source.
 | Curve abstraction + floating-rate strategy | Phase 1 | Already justified by flat/bootstrapped curves and simple/compounded accrual variants. |
 | Quote bump-and-reprice | Phase 2 | Required first-order risk implementation for the MVP. |
 | QuantLib quote/handle machinery | Phase 2 benchmark | IQ explains how mutable quotes notify dependent term structures; the hand-rolled core remains explicit and minimal. |
-| Jacobian model→market risk propagation | Post-MVP | Source II §3.4 follows curve calibration. Add it only after bump risk provides a trusted reference. |
+| Finite-difference calibration Jacobian cross-check | Phase 2 stretch | Build only after direct quote bump-and-reprice is green; it is non-gating and provides a two-way validation of market-risk propagation. |
+| Analytic Jacobian model→market risk propagation | Post-MVP | Source II §3.4 follows curve calibration. Add it only after finite-difference bump risk provides a trusted reference. |
 | PCA risk and eigen-scenarios | Phase 3 stretch | Source II §§4.2–4.3 consume market-risk vectors and historical curve moves; they do not belong in the bootstrap. |
 | Registry / plugin architecture | Phase 8+ if needed | Defer until multiple independently constructed model or product families make a factory useful. |
 | Model serialization | When stable persistence is needed | Stable CSV input/output schemas are sufficient for the MVP. |
@@ -169,9 +170,11 @@ at and between nodes, bad inputs, bump sign/magnitude, determinism, and comparis
 with QuantLib. Every numerical tolerance must say what is being compared and in
 which units.
 
-**Deferred:** the analytic Jacobian transformation in Source II §3.4. Once the
-bump implementation is trusted, it can serve as the finite-difference reference
-for a post-MVP Jacobian implementation.
+**Deferred:** the analytic Jacobian transformation in Source II §3.4. *Owner
+decision (2026-07):* a **finite-difference** calibration Jacobian + two-way
+DV01 cross-check is an **in-phase stretch**, sequenced strictly after direct
+quote DV01 is green and not gating `v0.3-curve-dv01`. That stretch becomes the
+trusted numerical reference for the post-MVP analytic implementation.
 
 Milestone: tag `v0.3-curve-dv01`.
 

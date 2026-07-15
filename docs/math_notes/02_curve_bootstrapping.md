@@ -55,6 +55,13 @@ Indices are used consistently as follows:
 | $\mathcal J$ | Calibration Jacobian $\partial\mathbf g/\partial\boldsymbol\theta$, entries $\mathcal J_{mn}=\partial g_m/\partial\theta_n$ (model quotes w.r.t. curve nodes); lower-triangular for a sequential bootstrap. |
 
 ## Market Instruments
+<!-- OWNER TODO (partially accrued first future): Update this section for the
+chosen 2026-01-15 snapshot. State the valuation-time convention, identify
+SR3Z25 as the partially accrued first contract, identify the later contracts
+as fully forward, and state which published SOFR fixing dates are known at the
+valuation time. Decide whether the strip is SR3Z25--SR3Z28 (13 contracts) or a
+different explicitly pinned consecutive set. -->
+
 ### SOFR Futures
 Three-Month SOFR futures are used for front-to-belly curve construction. We assume no convexity adjustment here and leave it to future implementation where a stochastic model is introduced.
 
@@ -129,6 +136,12 @@ For convenience, $P^{\mathrm{SOFR}}(t,T)$ denotes the extended zero-coupon bond 
 
 We set the current valuation time equal to $0$ with $P^{\mathrm{SOFR}}(0,0)=1$. If the first selected SR3 contract has already entered its reference quarter, then $T_{s,m}<0<T_{e,m}$. Under the extended zero-coupon bond definition,
 
+<!-- OWNER TODO (make this the selected bootstrap path): This paragraph is
+currently conditional. Revise it so the partially accrued SR3Z25 case is the
+actual first bootstrap step. Explain the realized-fixing cutoff at the pinned
+valuation time, the applicable calendar-day weights, and why the quoted rate
+is for the complete reference quarter rather than only its remaining part. -->
+
 $$
 P^{\mathrm{SOFR}}(0,T_{s,m})
 =
@@ -156,6 +169,11 @@ P^{\mathrm{SOFR}}(0,T_{s,m})
 P^{\mathrm{SOFR}}(0;T_{s,m},T_{e,m})
 A^{\mathrm{SOFR}}(T_{s,m},0).
 $$
+
+<!-- OWNER TODO (first-future model quote): Add the inverse/model-implied-rate
+statement needed to reprice the partially accrued first future from its
+realized accumulation and calibrated end-date discount factor. State the
+positivity/domain conditions required for this calculation. -->
 
 Once this first future node has been obtained, consecutive SR3 contracts can
 be used sequentially. For a subsequent contract whose start-date discount
@@ -392,6 +410,10 @@ For this phase, we set each OIS pillar to its last relevant date, including its 
 
 ## Repricing Diagnostics
 
+<!-- OWNER TODO (first-future diagnostic): Define R_model for the partially
+accrued first future explicitly, then confirm that its residual is measured in
+the same decimal full-quarter rate units as every other futures residual. -->
+
 Define every residual in decimal-rate units:
 $$
 \epsilon_m =
@@ -408,6 +430,11 @@ $$
 $$
 
 ## DV01 / Bump-and-Reprice
+
+<!-- OWNER TODO (fixings under a bump): State whether realized fixings and the
+realized accumulation factor remain fixed in every DV01 scenario. Specify what
+is bumped for SR3Z25, how the normalized rate bump maps to its stored IMM
+price, and whether every bumped scenario performs a complete re-bootstrap. -->
 
 ### Setup and notation
 
@@ -518,6 +545,11 @@ specified directly. If a selected contract has already entered its reference
 quarter, load the same realized SOFR fixings used by the hand-rolled bootstrap
 into the QuantLib `Sofr` index before constructing the curve.
 
+<!-- OWNER TODO (mandatory QuantLib fixing path): The paragraph above is
+currently conditional. Make loading the identical pinned SR3Z25 fixings a
+required benchmark step, and state which first-future model quote, pillar
+discount factor, and downstream curve values must be compared. -->
+
 For each OIS quote, use `OISRateHelper` with a `Sofr` index. Leave its external
 discounting-curve handle empty so that the bootstrapped curve is used for both
 SOFR projection and discounting, consistently with the single-curve
@@ -611,6 +643,12 @@ model mismatch.
 
 ## Inputs / Outputs
 
+<!-- OWNER TODO (fixing input contract): Remove the fully-forward-only input
+assumption below. Add the historical-fixing input fields and their date/rate
+units, define the accepted fixing-date range and weekend/holiday treatment,
+and choose an as-of/revision policy. State that missing required fixings are
+errors rather than values to be projected or silently filled. -->
+
 Inputs (exact file schemas and pinned values live in the implementation
 note, `docs/impl_notes/02_curve_bootstrap.md` §1a):
 
@@ -634,6 +672,11 @@ Outputs:
   convention stated above.
 
 ## Assumptions
+<!-- OWNER TODO (partially accrued assumptions): Record the valuation-time and
+SOFR-publication convention, whether pinned historical fixings are initial or
+final revised values, and that realized fixings are immutable during
+calibration and risk calculations. Keep the no-convexity assumption explicit. -->
+
 - No futures convexity adjustment
 - Deterministic curve
 - No multi-curve basis
@@ -648,6 +691,13 @@ Outputs:
 - No analytic Jacobian unless added as stretch
 
 ## Tests Implied by This Note
+<!-- OWNER TODO (partially accrued tests): Add tests for the realized
+accumulation calculation, calendar-day weights, the first pillar and its
+repricing residual, fixing validation (missing/duplicate/out-of-range/non-
+finite), the identical-fixings QuantLib comparison, and DV01 scenarios that
+hold realized history fixed. Every numerical check needs units and a stated
+tolerance. -->
+
 - Calibration instruments reprice
 - Discount factors are positive
 - Own curve close to QuantLib curve

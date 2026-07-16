@@ -5,6 +5,9 @@
 - Source II 3.3.1
 - Source II 3.4
 - QuantLib docs/examples
+- NY Fed SOFR publication — https://www.newyorkfed.org/markets/reference-rates/sofr
+  (source of the historical fixings used in the deterministic hybrid fixture;
+  publication timing and same-day revision window per this source, §Market Instruments)
 
 ## Notation
 
@@ -52,7 +55,7 @@ Indices are used consistently as follows:
 | $\epsilon_m$ | Repricing error for calibration instrument $m$. |
 | $\mathbf q$ | Vector of market quotes $(q_1,\dots,q_M)$ — the futures rates $R_{\mathrm{fut},m}$ and OIS par rates $S_m$. |
 | $\boldsymbol\theta$ | Vector of calibrated curve node values, $\theta_m=\log P^{\mathrm{SOFR}}(0,L_m)$; equals the vector of node coordinates $x_m$ after calibration. |
-| $\mathcal J$ | Calibration Jacobian $\partial\mathbf g/\partial\boldsymbol\theta$, entries $\mathcal J_{mn}=\partial g_m/\partial\theta_n$ (model quotes w.r.t. curve nodes); lower-triangular for a sequential bootstrap. |
+| $\mathcal J$ | Calibration Jacobian $\partial\mathbf g/\partial\boldsymbol\theta$, entries $\mathcal J_{mn}=\partial g_m/\partial\theta_n$ (model quotes w.r.t. curve nodes); lower-triangular for a sequential bootstrap. Phase 2 approximates it by central finite differences; an analytic Jacobian is future work. |
 
 ## Market Instruments
 ### SOFR Futures
@@ -60,12 +63,25 @@ Three-Month SOFR futures are used for front-to-belly curve construction. We assu
 
 For futures contract $m$, the quoted IMM price is $Q_m=100-100R_{\mathrm{fut},m}$, where $R_{\mathrm{fut},m}$ is the annualized business-day-compounded SOFR rate implied for the contract reference quarter. One-Month SOFR futures use a simple arithmetic average instead. Ignoring convexity, the futures-implied rate is identified with the forward compounded-SOFR rate over the reference quarter; the constraint this places on the discount curve is written out in the Calibration Equations section.
 
-Note that SOFR is published on every U.S. business day at approximately 8:00am EST, but the Fed may correct and republish it until 2:30pm EST, and the published rate reflects repo transactions entered into on the previous business day.
+SOFR is published on each U.S. business day at approximately 8:00 a.m. ET. The
+New York Fed may publish a revision at approximately 2:30 p.m. ET on the same
+day, and each publication carries the rate date of the preceding U.S. business
+day.
+
+The inputs form a **deterministic hybrid test fixture** as of **2026-01-15 at
+3:00 p.m. ET**, after the approximately 2:30 p.m. revision window. Historical
+SOFR fixings are final values published by the New York Fed, while the SR3 and
+OIS quotes are synthetic but internally consistent. This fixture is not
+presented as a historical market snapshot. The final SOFR fixing with rate date
+2026-01-14 is known. SR3Z25 is the first instrument and is partially accrued,
+so its realized accumulation uses final SOFR fixings from its 2025-12-17
+reference-quarter start through 2026-01-14. The later contracts are fully
+forward. The strip is SR3Z25--SR3Z28 (13 consecutive contracts).
 
 ### OIS Swaps
 An OIS instrument $m$ is quoted at the par fixed rate $S_m$ that makes the fixed and floating legs have equal present value at inception. The fixed leg pays $S_m$ on an annual annuity; the floating leg pays the annualized business-day-compounded SOFR rate $R_{\mathrm{cmp}}^{\mathrm{SOFR}}(T_{i-1},T_i)$ over each accrual period. The medium-to-long end of the curve (4Y through 30Y here) is calibrated from these quotes. The leg present values, the model par rate, and the par-rate calibration condition are written out in the Calibration Equations section.
 
-For a standard USD SOFR OIS, payment dates are two business days after the corresponding accrual-period end dates. Thus $U_i$ and $V_j$ are obtained by advancing their respective period-end dates by two business days under the specified payment calendar.
+For a standard USD SOFR OIS according to CFTC specification, payment dates are two business days after the corresponding accrual-period end dates. Thus $U_i$ and $V_j$ are obtained by advancing their respective period-end dates by two business days under the specified payment calendar.
 
 The instrument specifications used are summarized below.
 
@@ -75,7 +91,7 @@ The instrument specifications used are summarized below.
 | --- | --- | --- |
 | Instrument | CME Three-Month SOFR future (`SR3`) | Spot-starting par SOFR OIS |
 | Curve region | Front and intermediate part of the curve | Medium and long end of the curve |
-| Instruments used | `SR3H26` through `SR3Z28` | 4Y, 5Y, 7Y, 10Y, 12Y, 15Y, 20Y, 25Y and 30Y |
+| Instruments used | `SR3Z25` through `SR3Z28` | 4Y, 5Y, 6Y, 7Y, 10Y, 12Y, 15Y, 20Y and 30Y |
 | Market quote | IMM price index $Q_m$ | Par fixed rate $S_m$ |
 | Rate conversion | $R_{\mathrm{fut},m}=(100-Q_m)/100$ | $S_m$ is already quoted as a decimal annual rate |
 | Underlying rate | Compounded daily SOFR over the contract reference quarter | Compounded daily SOFR over each OIS accrual period |
@@ -127,7 +143,7 @@ P^{\mathrm{SOFR}}(0;T_{s,m},T_{e,m})
 $$
 For convenience, $P^{\mathrm{SOFR}}(t,T)$ denotes the extended zero-coupon bond price. For $T\geq t$, it is the ordinary zero-coupon bond price. For $T<t$, it is the value at time $t$ of reinvesting the bond's unit payoff from $T$ through $t$, so that $P^{\mathrm{SOFR}}(t,T)=B(t)/B(T)$. Such notation has been used for numeraires of hybrid $T$-forward measures and is discussed for the Forward Market Model. See Glasserman and Zhao (2000) or Section 4.2.4 in Andersen and Piterbarg (2010).
 
-We set the current valuation time equal to $0$ with $P^{\mathrm{SOFR}}(0,0)=1$. If the first selected SR3 contract has already entered its reference quarter, then $T_{s,m}<0<T_{e,m}$. Under the extended zero-coupon bond definition,
+We set the current valuation time equal to $0$ with $P^{\mathrm{SOFR}}(0,0)=1$. Since the first selected SR3 contract has already entered its reference quarter, $T_{s,m}<0<T_{e,m}$. Under the extended zero-coupon bond definition,
 
 $$
 P^{\mathrm{SOFR}}(0,T_{s,m})
@@ -156,6 +172,14 @@ P^{\mathrm{SOFR}}(0,T_{s,m})
 P^{\mathrm{SOFR}}(0;T_{s,m},T_{e,m})
 A^{\mathrm{SOFR}}(T_{s,m},0).
 $$
+
+When repricing the partially accrued first contract, divide the calibrated
+end-date discount factor by the realized accumulation to isolate the remaining
+forward discount factor,
+$P^{\mathrm{SOFR}}(0;T_{s,m},T_{e,m})=
+P^{\mathrm{SOFR}}(0,T_{e,m})/A^{\mathrm{SOFR}}(T_{s,m},0)$. The inverse
+model-rate formula and its positivity conditions are stated in the Calibration
+Diagnostics section.
 
 Once this first future node has been obtained, consecutive SR3 contracts can
 be used sequentially. For a subsequent contract whose start-date discount
@@ -407,6 +431,17 @@ $$
 \max_m|\epsilon_m|\le 10^{-10}
 $$
 
+For the first node,
+$$
+P^{\mathrm{SOFR}}(0;T_{s,m},T_{e,m})=\frac{P(0,T_e)}{A_{\mathrm{realized}}} = \frac{1}{1+\tau R_{\mathrm{model}}}
+$$
+$$
+R_{\mathrm{model}}
+=
+\frac{A_{\mathrm{realized}}/P(0,T_e)-1}{\tau}.
+$$
+we must have $\tau>0$, $A_{\mathrm{realized}}>0$, and $P(0,T_e)>0$
+
 ## DV01 / Bump-and-Reprice
 
 ### Setup and notation
@@ -422,34 +457,83 @@ $$
 $$
 which implicitly defines the curve as a function of the quotes, $\boldsymbol\theta^\star(\mathbf q)$.
 
-### The two DV01s, precisely
+### The Two Sensitivity Spaces
 
-Based on our current setup, there are two different approach to calculate DV01:
+The current setup distinguishes two sensitivities:
 
 - **Curve-space sensitivity** — bump a node, reprice: $\;\mathbf s^{\mathrm{curve}} = \nabla_{\boldsymbol\theta} V$ (an $M$-vector, one entry per node).
 - **Quote-space sensitivity** — bump a quote, *re-bootstrap*, reprice: $\;\mathbf s^{\mathrm{quote}} = \nabla_{\mathbf q} V$ (one entry per tradeable instrument).
 
-that is, for any present value of a target portfolio, the zero-coupon bond component $P(t, T)$ can be written as a function of either the calibrated nodes $\boldsymbol\theta$ or the quotes $\mathbf q$; $\nabla_{\boldsymbol\psi}V$ is the sensitivity of the target portfolio w.r.t. the chosen parameter vector $\boldsymbol\psi \in \{\boldsymbol\theta, \mathbf q\}$.
-Finally, DV01 $= \mathbf s\,\Delta_{\mathrm{bp}}$ is these sensitivities scaled by $\Delta_{\mathrm{bp}}=10^{-4}$: the change in present value for a one-basis-point change in the chosen parameter.
+For a parameter vector $\boldsymbol\psi\in\{\boldsymbol\theta,\mathbf q\}$,
+the component sensitivity is estimated with a central finite difference of
+half-width $h_\psi$:
 
-**Sign convention.** We adopt the signed risk-system convention: DV01 is the PV change under an *upward* one-basis-point bump,
 $$
-\mathrm{DV01} := V(\text{after } +1\mathrm{bp}) - V(\text{before}) = \mathbf s\,\Delta_{\mathrm{bp}}.
+s_m
+=
+\frac{\partial V}{\partial\psi_m}
+\approx
+\frac{
+V(\boldsymbol\psi+h_\psi\mathbf e_m)
+-V(\boldsymbol\psi-h_\psi\mathbf e_m)
+}{2h_\psi}.
 $$
-Under this convention a payer swap has positive DV01 (it gains when rates rise) and a receiver swap negative. The classic bond-market "dollar value of an 01" is quoted with the opposite sign ($-\Delta V$ for $+1$bp, so a long bond has positive DV01); flip the sign when comparing against that convention.
 
-Both type of DV01 can be solved in closed-form, but here in Phase 2  bump-and-reprice is apply as this will be the fallback method. 
+**Sign convention.** This project adopts an upward-oriented signed convention.
+For market quote $q_m$ and $\Delta_{\mathrm{bp}}=10^{-4}$,
+
+$$
+\mathrm{DV01}^{\uparrow}_m
+:=
+\Delta_{\mathrm{bp}}\frac{\partial V}{\partial q_m}
+\approx
+\frac{\Delta_{\mathrm{bp}}}{2h_q}
+\left[
+V(\mathbf q+h_q\mathbf e_m)
+-V(\mathbf q-h_q\mathbf e_m)
+\right].
+$$
+
+The reference implementation sets $h_q=\Delta_{\mathrm{bp}}$, so
+
+$$
+\mathrm{DV01}^{\uparrow}_m
+\approx
+\frac{
+V(\mathbf q+\Delta_{\mathrm{bp}}\mathbf e_m)
+-V(\mathbf q-\Delta_{\mathrm{bp}}\mathbf e_m)
+}{2}.
+$$
+
+Under this convention a payer swap has positive DV01 because it gains when
+rates rise, and a receiver swap has negative DV01. The classic bond-market
+"dollar value of an 01" is often reported as the opposite-signed positive
+magnitude for a long-duration position; flip the sign when comparing with that
+convention.
+
+Both sensitivities can be estimated by bump-and-reprice; analytic
+differentiation is separate future work.
 
 There are three reasons quote-space sensitivity is preferred:
 
-1. It's a hedge ratio in tradeable instruments. When hedging a book, trader *trade* futures and swaps, not by "trading the 5Y log-discount node," which isn't a thing. And a calibrating instrument's risk sits (to leading order) in its own bucket: bumping $q_m$ moves instrument $m$'s own PV through its annuity directly, while cross-effects on the other par instruments are second-order. So $\mathbf s^{\mathrm{quote}}$ reads off, almost directly, *how many of each benchmark to trade* to neutralize risk. $\mathbf s^{\mathrm{curve}}$ does not.
-2. It's how desks attribute and report risk. Bucketed DV01 (or key rate DV01) by benchmark tenor is the language of a rates desk, and P&L-explain runs on *observable* quote moves, not model node moves.
-3. The buckets are model-representation-independent. They're tied to real instruments, so two systems with different curve internals (different interpolation, different node placement) still agree on "DV01 to the 5Y swap." Node sensitivities are artifacts of specific parameterization, the same portfolio bootstrapped log-linear vs. spline gives different node DV01s.
+1. It expresses risk in buckets associated with tradeable instruments. A
+   portfolio quote DV01 is not itself a hedge quantity: the hedge units for
+   bucket $m$ are obtained by dividing the portfolio bucket DV01 by the signed
+   DV01 of one unit of the corresponding hedge instrument, with the trade sign
+   chosen to offset the portfolio exposure.
+2. It's how desks attribute and report risk. Bucketed DV01 (or key rate DV01) by
+   benchmark tenor is the language of a rates desk, and P&L-explain runs on *observable* quote moves, not model node moves.
+3. Quote buckets are less parameterization-dependent than curve-node buckets
+   because their labels are tied to observable calibration instruments. Their
+   numerical values are not completely model-independent: they can still vary
+   with the calibration instrument set, interpolation rule, and other curve
+   construction choices. Curve-node sensitivities additionally depend directly
+   on the internal node coordinates.
 
-### Prove: curve × Jacobian = quote
+### Finite-Difference Jacobian Cross-Check
 
 
-In addition, there is relationship between two DV01. It can be show that 
+The exact Jacobian identity relates curve-node and market-quote sensitivities:
 $$
 \mathbf s^{\mathrm{quote}\,\top}
 = \mathbf s^{\mathrm{curve}\,\top}\,\mathcal J^{-1}.
@@ -458,6 +542,22 @@ Define the calibration Jacobian, model quotes w.r.t. curve nodes:
 $$
 \mathcal J = \frac{\partial \mathbf g}{\partial \boldsymbol\theta}, \qquad \mathcal J_{mn} = \frac{\partial g_m}{\partial \theta_n}.
 $$
+
+Phase 2 does not evaluate these derivatives analytically. For a node-coordinate
+bump $h_\theta$, it estimates each entry by the central finite difference
+
+$$
+\mathcal J^{\mathrm{FD}}_{mn}
+=
+\frac{
+g_m(\boldsymbol\theta+h_\theta\mathbf e_n)
+-g_m(\boldsymbol\theta-h_\theta\mathbf e_n)
+}{2h_\theta}.
+$$
+
+The formulas below use $\mathcal J$ for the exact mathematical identity; the
+Phase 2 cross-check substitutes $\mathcal J^{\mathrm{FD}}$. Computing an
+analytic Jacobian is explicitly reserved for future work.
 
 Differentiate the calibration identity $\mathbf g(\boldsymbol\theta^\star(\mathbf q)) = \mathbf q$ with respect to $\mathbf q$. By the chain rule, it can be easily shown that:
 $$
@@ -482,18 +582,45 @@ $$
 $$
 
 
-Worth knowing ,for cheap inversion and as a correctness check. In a sequential bootstrap, instrument $m$'s cashflows all fall on or before its pillar $L_m$, so its model quote $g_m$ depends only on nodes $\theta_1,\dots,\theta_m$ — never on later nodes:
+Worth knowing, for cheap inversion and as a correctness check. In a sequential bootstrap, instrument $m$'s cashflows all fall on or before its pillar $L_m$, so its model quote $g_m$ depends only on nodes $\theta_1,\dots,\theta_m$ — never on later nodes:
 $$
 \frac{\partial g_m}{\partial \theta_n} = 0 \quad \text{for } n > m.
 $$
 So $\mathcal J$ is **lower-triangular**. Two consequences: (1) it's invertible iff every diagonal entry $\partial g_m/\partial\theta_m \neq 0$ — i.e., each instrument is genuinely sensitive to its own node, which is exactly the well-posedness condition for the bootstrap; (2) no matrix inverse is ever formed: the DV01 transformation solves $\mathcal J^\top\mathbf s^{\mathrm{quote}}=\mathbf s^{\mathrm{curve}}$ directly, and since $\mathcal J^\top$ is *upper*-triangular this is a single back-substitution pass.
 
-Finally, since two method are related, it can be another way to test the result of code. That is, compute $\mathbf s^{\mathrm{quote}}$ two independent ways and require agreement :
+The implementation can therefore compute $\mathbf s^{\mathrm{quote}}$ in two
+independent ways and require agreement:
 
-- **(a) Direct:** bump each quote $q_m$ by 1bp, re-bootstrap the whole curve, reprice $V$, finite-difference. This is the "honest" quote DV01.
-- **(b) Via Jacobian:** get $\mathbf s^{\mathrm{curve}}$ by bumping nodes, build $\mathcal J$ by bumping nodes and recomputing model quotes, then form $\mathcal J^{-\top}\mathbf s^{\mathrm{curve}}$.
+- **(a) Direct:** bump each quote $q_m$ by $\pm1$ bp, completely re-bootstrap
+  both curves, and use the central difference defined above. This is the
+  reference quote DV01.
+- **(b) Via the finite-difference Jacobian:** estimate $\mathbf s^{\mathrm{curve}}$ and $\mathcal J^{\mathrm{FD}}$ with central node bumps, then solve $(\mathcal J^{\mathrm{FD}})^\top\mathbf s^{\mathrm{quote}}=\mathbf s^{\mathrm{curve}}$ by back-substitution.
 
+### Quote DV01 Convention
 
+For quote DV01, this project uses the following scenario convention:
+1. Published fixings remain fixed. They are historical observations, not market variables.
+2. The realized accumulation factor remains fixed, because it is calculated entirely from those fixings.
+3. Bump the quoted full-quarter futures rate, not the remaining-period forward rate.
+4. Re-bootstrap the entire curve for each scenario in the reference implementation.
+5. Treat fixing corrections, valuation-date rolls, and publication updates as separate scenarios, not DV01.
+
+And this is what we desired to implement in this phase. Recall that for the first period
+$$
+P^{\mathrm{SOFR}}(0,T_{e,m})
+=
+P^{\mathrm{SOFR}}(0;T_{s,m},T_{e,m})
+A^{\mathrm{SOFR}}(T_{s,m},0).
+$$
+With the published fixings and
+$A^{\mathrm{SOFR}}(T_{s,m},0)$ held fixed, a bump to the observable
+full-quarter rate can be interpreted as requiring calibration to move
+$P^{\mathrm{SOFR}}(0;T_{s,m},T_{e,m})$, the remaining forward component that
+still carries market risk. Operationally, the scenario bumps the full-quarter
+quote and performs a complete re-bootstrap; it does not directly bump the
+remaining-period forward rate.
+
+Also note that $R\pm h \leftrightarrow Q\mp100h$ is used when bumping.
 
 ## QuantLib Benchmark
 
@@ -603,24 +730,50 @@ $$
 A tolerance breach should first trigger a comparison of quote units, fixing
 history, reference date, curve day counter, helper pillar dates, schedules,
 payment lag, calendars, convexity adjustment, interpolation, and bump
-direction. The tolerance should not be relaxed to conceal a convention or
-model mismatch.
+direction. The tolerance should not be relaxed to conceal a convention or model mismatch.
 
-
+In conclusion
+1. QuantLib’s evaluation date is set to 2026-01-15.
+2. Load identical Sofr fixing records for business-day rate dates from the SR3Z25 quarter start through 2026-01-14.
+3. Load fixings before constructing the curve helpers.
+4. Construct SR3Z25 using SofrFutureRateHelper, Quarterly, zero convexity adjustment, and the agreed pillar rule.
+5. Use the identical fixing history for the hand-rolled and QuantLib curves and keep it unchanged in every DV01 scenario.
+6. Compare the SR3Z25 model-implied full-quarter decimal rate, first pillar date, first pillar DF, every downstream pillar DF, the off-pillar grid, and quote DV01.
+7. Treat a missing required historical fixing as an error.
 
 
 ## Inputs / Outputs
 
-Inputs (exact file schemas and pinned values live in the implementation
-note, `docs/impl_notes/02_curve_bootstrap.md` §1a):
+Inputs form a deterministic hybrid test fixture. Exact file schemas and pinned
+values live in the implementation note,
+`docs/impl_notes/02_curve_bootstrap.md` §1a:
 
-- valuation date (a business day; every futures contract fully forward in
-  Phase 2 — the partially accrued case is documented above but deferred);
-- futures quotes: contract id, IMM reference-quarter start/end dates, price
-  $Q_m$;
-- OIS quotes: tenor, par rate $S_m$;
+- fixture as-of timestamp: 2026-01-15 at 3:00 p.m. ET;
+- historical SOFR records containing a business-day rate date and a decimal
+  annualized rate, using final values published by the New York Fed from
+  2025-12-17 through 2026-01-14 inclusive;
+- no fixing record is supplied for a weekend or holiday; each fixing receives
+  its Act/360 calendar-day weight through the next business-day rate date;
+- missing, duplicate, out-of-range, or non-finite fixing records are errors and
+  are never projected or silently filled;
+- synthetic, internally consistent futures quotes: contract id, IMM
+  reference-quarter start/end dates, and price $Q_m$;
+- synthetic, internally consistent OIS quotes: tenor and par rate $S_m$;
 - conventions: calendars, day counts (curve Act/365F, accrual Act/360),
   spot lag, payment delay, business-day rule, interpolation choice.
+
+Validation failures are explicit:
+
+- instrument dates must be valid and strictly ordered, futures reference
+  quarters must not overlap, and the selected futures strip must be contiguous;
+- calibration pillar dates must be unique and strictly increasing;
+- every market quote and fixing must be finite;
+- each futures quote must satisfy
+  $1+\tau_mR_{\mathrm{fut},m}>0$;
+- every calibrated and interpolated discount factor must be finite and strictly
+  positive;
+- failure to bracket a calibration root or to converge within the configured
+  iteration limit is an error that identifies the affected instrument.
 
 Outputs:
 
@@ -634,30 +787,70 @@ Outputs:
   convention stated above.
 
 ## Assumptions
-- No futures convexity adjustment
-- Deterministic curve
-- No multi-curve basis
-- No xCcy collateral effects
-- Clean SOFR collateralization
+- The deterministic hybrid test fixture is as of 2026-01-15 at 3:00 p.m. ET,
+  after the approximately 2:30 p.m. same-day revision window. It combines
+  actual final SOFR fixings with synthetic SR3 and OIS quotes and is not a
+  historical market snapshot.
+- Latest known fixing rate date is 2026-01-14.
+- Pinned fixings use final published values and Act/360 calendar-day weights.
+- Missing historical fixings are errors and are never projected.
+- Historical fixings and realized accumulation remain immutable during calibration and DV01.
+- SR3Z25 is partially accrued; all later futures are fully forward.
+- Futures quotes represent full-quarter compounded rates.
+- No futures convexity adjustment, deterministic single curve, clean SOFR collateralization, no basis or cross-currency effects.
 
-## Known Limitations
-- Ignoring futures convexity
-- Simplified interpolation
-- Simplified market conventions
-- No calibrated volatility model
-- No analytic Jacobian unless added as stretch
 
 ## Tests Implied by This Note
-- Calibration instruments reprice
-- Discount factors are positive
-- Own curve close to QuantLib curve
-- DV01 sign and rough magnitude are sensible
-- Bad inputs fail explicitly
+1. **SR3Z25 boundary:** require the reference quarter to be
+   $[2025\text{-}12\text{-}17,2026\text{-}03\text{-}18)$, containing 91
+   calendar days. At the 2026-01-15 valuation date, the realized interval is
+   $[2025\text{-}12\text{-}17,2026\text{-}01\text{-}15)$ and contains 29
+   calendar days. The fixing input must contain business-day rate dates through
+   2026-01-14, must not contain a 2026-01-15 rate date, and its calendar-day
+   weights must sum to 29. The full-quarter accrual fraction must remain
+   $\tau_m=91/360$.
+2. **Realized accumulation:** for the synthetic decimal rates $r_1=0.0400$
+   with $n_1=1$ calendar day and $r_2=0.0410$ with $n_2=3$ calendar days,
+   require
+   $$
+   A_{\mathrm{realized}}
+   =\left(1+\frac{0.0400}{360}\right)
+    \left(1+\frac{3(0.0410)}{360}\right)
+   =1.00045281574074
+   $$
+   within $10^{-12}$ in dimensionless accumulation-factor units.
+3. **First pillar and inverse quote:** with the synthetic accumulation above,
+   $\tau=91/360$, and $R_{\mathrm{fut}}=0.0430$, require
+   $P(0,T_e)=A_{\mathrm{realized}}/(1+\tau R_{\mathrm{fut}})
+   =0.989695376825414$ within $10^{-12}$. Recovering the model rate from that
+   discount factor must return $0.0430$ within $10^{-12}$ in decimal-rate
+   units.
+4. **Fixing validation:** missing, duplicate, out-of-range, and non-finite
+   fixing records must each fail explicitly. A Friday fixing followed by a
+   Monday rate date must receive a three-calendar-day weight.
+5. **Input and calibration failures:** invalid or non-increasing instrument
+   dates, overlapping or non-contiguous futures quarters, duplicate pillars,
+   non-finite quotes, $1+\tau_mR_{\mathrm{fut},m}\leq0$, non-positive discount
+   factors, an unbracketed root, and failure to converge must each produce an
+   explicit error. Every valid calibration instrument must satisfy
+   $|\epsilon_m|\leq10^{-10}$ in decimal-rate units, and every in-domain
+   discount factor must be finite and positive.
+6. **QuantLib benchmark:** both curves must use the identical pinned fixing
+   history. Compare first and downstream pillar discount factors and the
+   off-pillar grid using $|\delta_P|\leq10^{-8}$, together with the DV01
+   tolerance defined above.
+7. **DV01 scenarios:** for each central $\pm1$ bp quote bump, keep the
+   historical fixings and realized accumulation bit-for-bit unchanged, map a
+   futures rate bump to the opposite IMM-price bump, and perform a complete
+   re-bootstrap for both scenarios.
+8. **Finite-difference Jacobian stretch:** when implemented, compare the direct
+   quote DV01 with the finite-difference-Jacobian result using the DV01
+   tolerance defined above.
 
 ## Open Questions / Future Extensions
 - Add market-supplied futures convexity adjustments
 - Add Hull-White-implied convexity adjustment after vol calibration
-- Add Jacobian market-risk representation
+- Replace the finite-difference calibration Jacobian with an analytic Jacobian
 - Extend to basis curves / xCcy curves
 
 

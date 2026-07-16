@@ -107,8 +107,8 @@ Implemented:
 
 The implementation and 12 current tests are green. Before Phase 1 is fully
 "done" under this repository's definition, the owner should remove the
-remaining scaffold prompts and complete assumptions, inputs/outputs, and known
-limitations in `docs/math_notes/01_sofr_swap.md`.
+remaining scaffold prompts and complete assumptions (including explicit scope
+boundaries) and inputs/outputs in `docs/math_notes/01_sofr_swap.md`.
 
 Milestone: tag `v0.2-mini-pricer`.
 
@@ -128,15 +128,18 @@ bump-and-reprice.
 
 **Current gate:** `docs/math_notes/02_curve_bootstrapping.md` is an owner draft.
 No interface, red tests, or implementation begins until the owner completes
-the formulas, assumptions, inputs, outputs, conventions, tolerances, and known
-limitations required by `AGENTS.md`.
+the formulas, assumptions and scope boundaries, inputs, outputs, conventions,
+and tolerances required by `AGENTS.md`.
 
 #### Required decisions in the owner math note
 
-- Pin the valuation date and use only instruments active on that date. If the
-  Source II Table 1 quotes are reproduced, keep their observation date and
-  contract strip together; do not combine `SR3H26` with the Phase 1 valuation
-  date of May 23, 2026.
+- Pin the valuation date and instrument strip together and keep them
+  internally consistent; never mix an observation date with a contract strip
+  drawn from a different one. *(Resolved: the note uses a 2026-01-15
+  valuation with a SR3Z25–SR3Z28 strip. SR3Z25 is deliberately partially
+  accrued — priced via the realized SOFR accumulation factor from real NY
+  Fed fixings — rather than avoided by shifting to a pre-quarter valuation
+  date.)*
 - State how futures prices become implied rates and that Phase 2 ignores the
   futures convexity adjustment, matching Source II §3.3.1.
 - Define the curve state precisely: node dates, anchor, interpolation
@@ -192,7 +195,7 @@ four deterministic CSV reports promised in the README.
 
 Math note: `docs/math_notes/03_dv01_krd_scenarios.md` — owner-written before
 any Phase 3 interface or test work. It must define DV01/KRD signs, bump shapes,
-scenario semantics, aggregation, inputs/outputs, and limitations.
+scenario semantics, aggregation, inputs/outputs, and scope boundaries.
 
 Dependency order:
 
@@ -241,7 +244,7 @@ same dependency order.
 Math note: `docs/math_notes/04_foreign_collateral_curves.md` — owner-written
 before implementation. It must cover the non-MTM xCcy cash flows, FX-forward
 currency chain, collateral-currency effect, curve parameterization, signs,
-inputs/outputs, and limitations.
+inputs/outputs, and scope boundaries.
 
 Keep the first version to non-MTM xCcy basis swaps, covered-interest-parity
 checks, a deterministic synthetic quote file, explicit calibration diagnostics,

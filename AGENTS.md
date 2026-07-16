@@ -14,13 +14,17 @@ Phases 8–10.
 
 ## Hard rules
 
-1. **The repo owner writes the math note. You do not.** If a math note
-   for the module does not exist in `docs/math_notes/`, stop and say so.
-   Do not generate the math note yourself. The whole point of the project is that the owner learns the math.
+1. **The repo owner decides the content of the math note.** If a math note for
+   the module does not exist in `docs/math_notes/`, stop and say so. An AI may
+   apply or revise decisions that the owner has explicitly provided, including
+   prose and formatting changes. It must not invent mathematical or scope
+   decisions, or complete note sections that the owner has not addressed. The
+   point of the project is that the owner learns and controls the math.
 
 2. **No implementation before a math note exists** for that module. The
-   note must cover at minimum: formula, assumptions, inputs, outputs,
-   known limitations.
+   note must cover at minimum: formula, assumptions (including explicit scope
+   boundaries), inputs, and outputs. Scope boundaries may be recorded with the
+   assumptions; a separate `Known Limitations` section is not required.
 
 3. **Every pricer has a unit test before merge.** Every numerical method
    has either an analytic sanity check or a QuantLib comparison.

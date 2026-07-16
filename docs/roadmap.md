@@ -122,62 +122,32 @@ QuantLib quote, interpolation, solver, handle, and error machinery used by the
 benchmark. GLA Ch.7 gives the broader finite-difference sensitivity context.
 Source II §3.4 is a later risk extension, not a Phase 2 MVP dependency.
 
-**Goal:** transform a pinned set of SOFR futures and OIS quotes into a
-validated single-currency discount curve, then compute quote DV01 by
-bump-and-reprice.
+**Goal:** build a validated SOFR curve from the pinned SR3 futures and OIS
+fixture, then compute quote DV01 by complete bump-and-rebootstrap.
 
-**Current gate:** `docs/math_notes/02_curve_bootstrapping.md` is an owner draft.
-No interface, red tests, or implementation begins until the owner completes
-the formulas, assumptions and scope boundaries, inputs, outputs, conventions,
-and tolerances required by `AGENTS.md`.
+**Pinned scope:**
 
-#### Required decisions in the owner math note
+- Valuation date: 2026-01-15 at 3:00 p.m. ET.
+- SR3Z25–SR3Z28 plus 4Y, 5Y, 6Y, 7Y, 10Y, 12Y, 15Y, 20Y, and 30Y OIS.
+- SR3Z25 uses final historical SOFR fixings for its realized portion.
+- Piecewise log-linear discount curve with no futures convexity adjustment.
 
-- Pin the valuation date and instrument strip together and keep them
-  internally consistent; never mix an observation date with a contract strip
-  drawn from a different one. *(Resolved: the note uses a 2026-01-15
-  valuation with a SR3Z25–SR3Z28 strip. SR3Z25 is deliberately partially
-  accrued — priced via the realized SOFR accumulation factor from real NY
-  Fed fixings — rather than avoided by shifting to a pre-quarter valuation
-  date.)*
-- State how futures prices become implied rates and that Phase 2 ignores the
-  futures convexity adjustment, matching Source II §3.3.1.
-- Define the curve state precisely: node dates, anchor, interpolation
-  coordinate, and extrapolation policy. "Piecewise log-linear" alone is
-  ambiguous unless it says what quantity is logged and interpolated.
-- Define calibration residuals and tolerances with units. A rate error, a
-  discount-factor error, and a currency NPV error are not interchangeable.
-- State the DV01 sign convention and whether each bump applies to a market
-  quote, an internal curve node, or the full quote set.
-- Specify explicit failures for invalid dates, duplicate nodes, non-finite
-  quotes, non-positive discount factors, and an unsolved calibration.
+**Required deliverables:**
 
-#### Workflow after the note is complete
+- Hand-rolled sequential bootstrap with repricing diagnostics.
+- QuantLib benchmark using identical quotes, fixings, and conventions.
+- Deterministic `output/curve.csv`.
+- Direct quote-level DV01 using complete bump-and-rebootstrap scenarios.
 
-1. AI proposes the smallest header-only interfaces; owner approves them.
-2. AI writes GoogleTest cases and validation-only stubs so the suite builds red.
-3. Owner implements the curve representation and sequential bootstrap.
-4. Compare calibration repricing and curve outputs with a QuantLib
-   `PiecewiseYieldCurve` built from matching futures/OIS helpers.
-5. Add deterministic quote bump-and-reprice DV01.
-6. Add `examples/02_quantlib_sofr_curve_bootstrap.cpp` and write
-   `output/curve.csv` from a pinned sample quote file.
+**Acceptance:** calibration instruments reprice within the documented
+tolerances, discount factors are valid and positive, outputs are deterministic,
+and curve, PV, and DV01 results agree with the QuantLib benchmark.
 
-Exact class and file names are intentionally left to the interface-proposal
-step. The minimum implementation needs a quote/input representation, an
-immutable curve with discount lookup, and a bootstrap result that reports
-diagnostics rather than hiding failures.
+**Stretch:** finite-difference calibration Jacobian and two-way DV01
+cross-check. It is sequenced after direct quote DV01 is green and does not gate
+`v0.3-curve-dv01`.
 
-Tests must cover calibration repricing, positive discount factors, interpolation
-at and between nodes, bad inputs, bump sign/magnitude, determinism, and comparison
-with QuantLib. Every numerical tolerance must say what is being compared and in
-which units.
-
-**Deferred:** the analytic Jacobian transformation in Source II §3.4. *Owner
-decision (2026-07):* a **finite-difference** calibration Jacobian + two-way
-DV01 cross-check is an **in-phase stretch**, sequenced strictly after direct
-quote DV01 is green and not gating `v0.3-curve-dv01`. That stretch becomes the
-trusted numerical reference for the post-MVP analytic implementation.
+**Deferred:** analytic calibration Jacobian and futures convexity adjustment.
 
 Milestone: tag `v0.3-curve-dv01`.
 
@@ -221,6 +191,17 @@ Required tests include KRD aggregation versus parallel DV01 within a tolerance
 defined in the note, scenario P&L sign checks, invalid CSV/input handling, and
 byte-identical repeat output. PCA rows may be added to `scenario_pnl.csv` if the
 stretch is completed, but PCA does not gate the MVP.
+
+**Optional extension — batch discounting on `YieldCurve` (architecture, not
+math; does not gate the MVP).** Phase 2's `YieldCurve` deliberately exposes
+only scalar `discount(Date)`; a portfolio report is the first place multiple
+cashflow dates are priced per curve per trade, so it's the natural point to
+revisit. Only add a virtual `discounts(span<const Date>)` (default
+implementation: loop `discount()`; concrete curves may override) if profiling
+the Phase 3 portfolio run actually shows the per-date loop as a measured cost.
+Do not add it speculatively — every existing `YieldCurve` implementation keeps
+working unchanged whether this is added now or later, so there is no cost to
+deferring it until a profiler asks for it.
 
 Milestone: tag `v1.0-mvp`. **This is the contract.**
 

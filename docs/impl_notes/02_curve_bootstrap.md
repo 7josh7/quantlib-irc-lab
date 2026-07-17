@@ -3,9 +3,29 @@
 > **Not a math note.** The math lives in
 > [`docs/math_notes/02_curve_bootstrapping.md`](../math_notes/02_curve_bootstrapping.md);
 > this file is the code-facing spec: conventions pinned, architecture decided,
-> interfaces proposed, tests planned. Per [AGENTS.md](../../AGENTS.md)
-> workflow step 2, the headers below are a **proposal for owner approval**.
+> interfaces approved, tests planned. The owner approved the headers below
+> under [AGENTS.md](../../AGENTS.md) workflow step 2.
 > Per step 4, the owner implements; AI writes the red tests and stubs.
+>
+> Revision 9 — owner-approved `CouponPeriod` interface (2026-07-17): pins the
+> exact §2a header (`src/rates/coupon_period.hpp`), its validation contract,
+> the zero-lag delegation rule, the CMake source line, and the group I red
+> tests. The red-test/stub materialization accompanying this revision is
+> workflow step 1 of §7.
+>
+> Revision 8 — owner-approved payment-lag representation (2026-07-16): adds
+> a `CouponPeriod` value type, QuantLib-based period construction, and
+> period-based fixed/floating legs while preserving the Phase 1 zero-lag
+> constructors through delegation.
+>
+> Revision 7 — fixture data (2026-07-16): downloads and pins the 19 final
+> New York Fed SOFR effective-date observations authorized by the owner; the
+> next workflow gate is red tests and validation-only stubs.
+>
+> Revision 6 — owner decisions (2026-07-16): separates USNY OIS
+> schedule/payment dates from USGS SOFR fixing dates per the CFTC
+> specification; records the payment-lag pricer and finite-input hardening that
+> the owner will address during implementation; updates the workflow status.
 >
 > Revision 5 — owner-approved interface review (2026-07-15): retains rev 4's
 > deterministic hybrid fixture and partially accrued SR3Z25 treatment; adds a
@@ -46,19 +66,21 @@ finite-difference.
 | First future | **SR3Z25 is partially accrued**: quarter $[2025\text{-}12\text{-}17,\,2026\text{-}03\text{-}18)$, 91 calendar days, $\tau_1 = 91/360$; realized window $[2025\text{-}12\text{-}17,\,2026\text{-}01\text{-}15)$ = 29 calendar days | all later contracts fully forward |
 | Historical fixings | rate dates **2025-12-17 … 2026-01-14** (business days), final NY Fed values; each fixing carries its Act/360 **calendar-day weight through the next business-day rate date**; no weekend/holiday rate dates; never projected or filled | weights over the realized window sum to 29 days |
 | First pillar equation | $P(0,T_{e,1}) = A^{\mathrm{SOFR}}(T_{s,1},0)\,/\,(1+\tau_1 R_{\mathrm{fut},1})$, with $A$ the product of $(1+r_k\delta_k)$ over realized fixings | math note §Calibration + §Repricing Diagnostics (inverse form + positivity conditions) |
-| OIS set | **4Y 5Y 6Y 7Y 10Y 12Y 15Y 20Y 30Y**, spot-start (+2bd), annual legs both sides | spot from 2026-01-15 is 2026-01-20 (MLK Monday 2026-01-19 skipped — deliberate calendar exercise) |
+| OIS set | **4Y, 5Y, 6Y, 7Y, 10Y, 12Y, 15Y, 20Y, and 30Y**, selected from the CFTC spot-starting par SOFR OIS tenor set; 2Y and 3Y are omitted because the SR3 futures strip covers the short end | spot from 2026-01-15 is 2026-01-20 (MLK Monday 2026-01-19 skipped — deliberate calendar exercise) |
 | Instrument count | $M = 13 + 9 = 22$ | diagnostics, DV01 vectors, Jacobian dimension |
-| Calendar | `UnitedStates(SOFR)` | matches QL `Sofr` index → clean oracle |
+| OIS business / payment calendar | `UnitedStates(Settlement)` | QuantLib mapping used here for CFTC `USNY`; governs spot, accrual schedules, and payment dates |
+| SOFR fixing calendar | `UnitedStates(SOFR)` | QuantLib `Sofr` index calendar; maps the CFTC `USGS` fixing role and governs fixing dates/calendar-day weights |
+| Futures reference dates | Unadjusted IMM third Wednesdays | fixing coverage inside each reference quarter uses `UnitedStates(SOFR)` |
 | Curve day counter | Act/365F | node times $t_m$; math note §Interpolation |
 | Leg / futures accrual day counter | Act/360 | $\tau_i,\alpha_j,\tau_m,\delta_k$ |
 | OIS payment delay | 2 business days after accrual end | $U_i, V_j$ |
 | Business-day convention | ModifiedFollowing (OIS); IMM dates as-given (futures) | |
 | Curve state | $x_m = \log P(0, L_m)$ at pillar dates | |
-| Anchor node | storage index 0: $(t{=}0,\ \log P{=}0)$, **immutable** | §2a indexing contract; $A^{\mathrm{SOFR}}$ is *not* a curve node — it multiplies externally in the bootstrapper |
+| Anchor node | storage index 0: $(t{=}0,\ \log P{=}0)$, **immutable** | §2b indexing contract; $A^{\mathrm{SOFR}}$ is *not* a curve node — it multiplies externally in the bootstrapper |
 | Pillar rule | futures: reference-quarter end; OIS: last payment date (incl. delay) | `Pillar::LastRelevantDate` on the QL side |
 | Interpolation | linear in $\log P$ vs Act/365F time | constant IFR between nodes; the anchor→first-pillar segment is an ordinary interpolation segment (used e.g. to discount the OIS effective date 2026-01-20) |
 | Extrapolation | **curve throws** beyond last pillar and before reference | past dates (e.g. $T_{s,1}$) are never curve queries — realized accumulation handles them |
-| Root solver | finance-free callable-based bracketed bisection on $\epsilon_m$; residual tol $|\epsilon_m|\le10^{-12}$ (rate units), max 200 midpoint iterations | `src/core/bracketed_bisection.hpp`; no solver inheritance |
+| Root solver | finance-free callable-based bracketed bisection on $\epsilon_m$; residual tol | $\epsilon_m\le10^{-12}$ (rate units), max 200 midpoint iterations. `src/core/bracketed_bisection.hpp`; no solver inheritance |
 | Solver bracket | segment forward rate $f_m \in [-10\%, +50\%]$ (mapped to $x_m = x_{m-1} - f_m\,(t_m - t_{m-1})$); expand once to $[-50\%, +100\%]$; then **throw** with the instrument id | explicit two-stage rule; no silent fallback |
 | Bump semantics | §4a — one formula; reference implementation sets $h_q = \Delta_{\mathrm{bp}} = 10^{-4}$ | matches math note "reference implementation" |
 | DV01 scenario convention | `MarketAsOf`, fixings, and $A^{\mathrm{SOFR}}$ **bit-for-bit immutable**; bump the quoted **full-quarter** futures rate ($R\pm h \leftrightarrow Q\mp 100h$); **complete re-bootstrap per scenario** | math note §Quote DV01 Convention, items 1–5 |
@@ -74,18 +96,17 @@ fixings. Schema:
 
 ```csv
 # Final SOFR fixings published by the New York Fed (rate dates
-# 2025-12-17 .. 2026-01-14). Real data — transcribe, do not invent.
+# 2025-12-17 .. 2026-01-14). Real data downloaded from the official API.
 rate_date,rate
-2025-12-17,<TODO(owner)>
+2025-12-17,0.0369
 ...
-2026-01-14,<TODO(owner)>
+2026-01-14,0.0364
 ```
 
-**TODO(owner):** transcribe the final published values from the NY Fed
-(19 business-day rate dates in the window; the loader validates the exact
-set against the `UnitedStates(SOFR)` calendar, including the Christmas and
-New Year holidays). AI must not fill these in (AGENTS rule 6 — real market
-data is transcribed, never invented).
+The file was downloaded from the official New York Fed Markets Data API on
+2026-07-16. Its 19 `percentRate` values were divided by 100 and stored as
+decimal rates. The loader validates the exact effective-date set against the
+`UnitedStates(SOFR)` calendar, including the Christmas and New Year holidays.
 
 **`data/market/sofr_quotes_2026-01-15.csv`** — synthetic quotes, single
 source of truth for tests **and** the example. Accepted as calibration data
@@ -172,7 +193,7 @@ risk/dv01 -----------------> SofrCurveBootstrapper
 The runtime data flow remains: quote and fixing CSVs → `market_data_io` →
 `SofrMarketData` → `SofrCurveBootstrapper` → `BootstrapResult`.
 
-Proposed decisions for owner approval:
+Approved decisions:
 
 - **The interpolator is finance-independent.** Knot arrays and queries only —
   no dates, discount factors, or instruments. It never takes a curve
@@ -193,7 +214,41 @@ Proposed decisions for owner approval:
   `[reference, last pillar]` — flat log-DF extrapolation would imply a zero
   forward rate, which is financially wrong.
 
-### 2a. Node indexing contract (anchor vs calibrated nodes)
+### 2a. Owner implementation requirements
+
+Two prerequisites are recorded here rather than silently invented while the
+tests are being implemented:
+
+- **Payment-lag-capable OIS pricing (owner-approved design, 2026-07-16).** The
+  existing Phase 1 legs use each schedule date as both accrual end and payment
+  date, so they cannot represent this phase's two-USNY-business-day payment
+  delay. Introduce a small `CouponPeriod` value type containing
+  `accrual_start`, `accrual_end`, `payment_date`, and the accrual
+  `year_fraction`. Build period vectors from a QuantLib `Schedule`, the leg day
+  counter, and the applicable QuantLib payment calendar and payment lag. For
+  Phase 2 OIS coupons, the payment date is the accrual end advanced by two
+  USNY business days; the accrual boundaries are not replaced by the delayed
+  payment date.
+
+  Add period-based constructors to `FixedLeg` and `FloatingLeg`, and make their
+  pricing methods consume the resulting `CouponPeriod` sequence. Preserve
+  each existing Phase 1 constructor as the zero-lag convenience overload; it
+  delegates to the period-based representation with
+  `payment_date == accrual_end`. The bootstrap residuals, the 10Y target-swap
+  PV, and its DV01 must all use these same leg implementations. Tests 25–30
+  must not substitute the Phase 1 zero-lag convention or duplicate an
+  undocumented pricer inside a test. The exact header and validation contract
+  are pinned in §3 (`src/rates/coupon_period.hpp`).
+- **Finite-input hardening.** Before Phase 2 depends on the Phase 1 pricing
+  classes, add red regression tests to `tests/test_mini_pricer.cpp` and then
+  make `FlatCurve`, `FixedLeg`, `FloatingLeg`, and both rate-accrual strategies
+  reject non-finite numeric inputs explicitly. Finiteness checks apply to curve zero
+  rates, fixed rates, notionals, spreads, and caller-supplied year fractions;
+  existing domain checks such as positive notional and year fraction remain.
+  NaN must not pass a positivity check merely because comparisons with NaN are
+  false, and no public pricing path may return a silent NaN or infinity.
+
+### 2b. Node indexing contract (anchor vs calibrated nodes)
 
 The math note indexes **calibrated** nodes $m = 1,\dots,M$ ($M = 22$: one per
 instrument). The curve *stores* $M{+}1 = 23$ nodes because the constructor
@@ -209,7 +264,7 @@ bumps index 0**; `bump_node(curve, 0, …)` throws `std::invalid_argument`;
 `curve_node_sensitivities` returns exactly $M$ entries aligned with storage
 indices $1..M$ (and with instrument order).
 
-## 3. Proposed interfaces (headers only — owner implements)
+## 3. Approved interfaces (headers only — owner implements)
 
 ### `src/core/bracketed_bisection.hpp` — generic callable solver
 
@@ -257,6 +312,19 @@ an endpoint root or opposite endpoint signs. Invalid arguments throw
 throws `std::runtime_error` with the final numerical bracket and residuals.
 `iterations` counts midpoint evaluations; endpoint validation is excluded.
 
+The solver is a generic callable-based function because only the scalar
+contract `double residual(double x)` belongs in the numerical layer. A normal
+function can be passed when the residual has no auxiliary state. During OIS
+calibration, however, a lambda captures the instrument, market quote,
+previously solved nodes, and candidate-curve construction and exposes that
+stateful calculation through the same one-argument contract. This avoids
+global state and avoids adding finance-specific parameters to the solver.
+The forwarding-reference parameter accepts named or temporary callables
+without a mandatory copy; the `ScalarResidual` concept validates the contract
+at compile time. A template also avoids the type erasure of `std::function`
+and the virtual dispatch of a solver/residual inheritance hierarchy; the
+solver requires no heap allocation or polymorphic-object ownership.
+
 The bootstrapper owns the two-stage forward-rate bracket rule in §1. It captures
 the candidate-instrument state in a lambda, maps each financial bracket to node
 space, and calls `bracketed_bisection` only after establishing a sign change. It
@@ -302,6 +370,79 @@ non-strictly-increasing `xs`; `ys.size()` not a positive multiple of
 `xs.size()`; non-finite `ys`. `evaluate()` throws `std::invalid_argument` if
 any query is non-finite.
 
+### `src/rates/coupon_period.hpp` — §2a payment-lag representation
+
+```cpp
+#pragma once
+#include <ql/time/calendar.hpp>
+#include <ql/time/date.hpp>
+#include <ql/time/daycounter.hpp>
+#include <ql/time/schedule.hpp>
+#include <ql/types.hpp>
+
+#include <vector>
+
+namespace irc {
+
+// One coupon accrual period with its (possibly delayed) payment date.
+// Accrual boundaries are never replaced by the payment date (§2a); the
+// stored year_fraction is the leg day counter's accrual over
+// [accrual_start, accrual_end], so pricing never re-derives it.
+struct CouponPeriod {
+    QuantLib::Date accrual_start;
+    QuantLib::Date accrual_end;
+    QuantLib::Date payment_date;
+    double year_fraction;
+
+    bool operator==(const CouponPeriod&) const = default;
+};
+
+// One period per consecutive schedule date pair:
+//   payment_date  = payment_calendar.advance(accrual_end, lag, Days)
+//   year_fraction = day_counter.yearFraction(accrual_start, accrual_end)
+// payment_lag_business_days == 0 returns payment_date == accrual_end
+// unchanged — the builder never calls advance(d, 0, Days), because QuantLib
+// defines that as adjust(d), which could silently move an unadjusted date.
+std::vector<CouponPeriod> make_coupon_periods(const QuantLib::Schedule& schedule,
+                                              const QuantLib::DayCounter& day_counter,
+                                              const QuantLib::Calendar& payment_calendar,
+                                              QuantLib::Natural payment_lag_business_days);
+
+}  // namespace irc
+```
+
+`make_coupon_periods` throws `std::invalid_argument` on a schedule with fewer
+than two dates, an empty day counter, or an empty calendar.
+
+The period-based leg constructors are added to the existing Phase 1 headers:
+
+```cpp
+// src/rates/fixed_leg.hpp — added alongside the Phase 1 constructor
+FixedLeg(std::vector<CouponPeriod> periods, double notional, double fixed_rate);
+
+// src/rates/floating_leg.hpp — added alongside the Phase 1 constructor
+FloatingLeg(std::vector<CouponPeriod> periods, double notional,
+            std::shared_ptr<const RateAccrual> accrual, double spread = 0.0);
+```
+
+Their validation throws `std::invalid_argument` on: empty `periods`; any null
+date; `accrual_start >= accrual_end`; `payment_date < accrual_end`;
+non-finite or non-positive `year_fraction`; unordered or overlapping periods
+(`accrual_start[i+1] < accrual_end[i]`). The §2a finiteness rules for
+notional, fixed rate, and spread apply to these constructors from day one.
+Contiguity (`accrual_start[i+1] == accrual_end[i]`) is *not* required: the
+builder produces contiguous periods from a schedule, but the constructors
+accept any ordered non-overlapping sequence.
+
+Delegation rule (pinned so nobody "simplifies" it later): the Phase 1
+`(Schedule, DayCounter, ...)` constructors delegate by building periods
+directly with `payment_date = accrual_end`. They do **not** route through
+`make_coupon_periods` with lag 0 — they have no payment calendar to pass, and
+the identity must hold even for dates a calendar would adjust. Once the owner
+implements §2a, the pricing methods consume only the period representation;
+until then the stubs keep the Phase 1 schedule-based pricing path untouched
+(green) and throw `std::logic_error` from the period-constructed path.
+
 ### `src/curves/piecewise_log_linear_curve.hpp`
 
 ```cpp
@@ -328,7 +469,7 @@ struct CurveNode {
 // §Interpolation). Constant instantaneous forward between nodes.
 // Storage index 0 is the immutable anchor (reference date, log P = 0).
 // Callers supply calibrated pillars strictly after reference; the constructor
-// always prepends the anchor (impl note §2a).
+// always prepends the anchor (impl note §2b).
 // Throws on queries before reference or beyond the last pillar.
 class PiecewiseLogLinearCurve final : public YieldCurve {
 public:
@@ -487,7 +628,7 @@ and a trailing `\r` are removed, and quoted fields are rejected. Numeric
 parsing is locale-independent.
 
 Semantic validation requires: a non-null valuation date that is a
-`UnitedStates(SOFR)` business day; valid ordered third-Wednesday IMM dates with
+`UnitedStates(Settlement)` business day; valid ordered third-Wednesday IMM dates with
 `reference_end > reference_start`; contiguous non-overlapping futures
 quarters; unique increasing OIS tenors; finite quotes. Negative OIS rates and
 futures prices above 100 are valid. A futures quote is invalid only when its
@@ -502,10 +643,12 @@ generalized to arbitrary snapshot times, any cross-field consistency check
 must compare `valuation_date` with the **America/New_York local date** of
 `as_of_utc` under an explicit timezone policy; Phase 2 does not add a timezone-
 database dependency.
-Fixings validation (math note §Inputs): every `rate_date` is a business day
-in ascending order with no duplicates; rates finite; missing, duplicate,
-out-of-range, or non-finite records are errors and are never projected or
-silently filled.
+Fixings validation (math note §Inputs): every `rate_date` is a
+`UnitedStates(SOFR)` business day in ascending order with no duplicates; rates
+finite; missing, duplicate, out-of-range, or non-finite records are errors and
+are never projected or silently filled. OIS spot, accrual, and payment dates
+are generated with `UnitedStates(Settlement)`; the two calendars must not be
+interchanged merely to make the hand-rolled and QuantLib curves agree.
 
 ### `src/curves/sofr_bootstrapper.hpp`
 
@@ -682,7 +825,7 @@ using CurvePricer = std::function<double(const YieldCurve&)>;
 
 // Raw node sensitivities s_n = dV/d(theta_n), central difference with
 // half-width `node_half_width` (log-DF units). Returns M entries for
-// storage indices 1..M (anchor never bumped — impl note §2a).
+// storage indices 1..M (anchor never bumped — impl note §2b).
 std::vector<double> curve_node_sensitivities(
     const PiecewiseLogLinearCurve& curve, const CurvePricer& pv,
     double node_half_width = 1e-6);
@@ -783,6 +926,13 @@ to green, group by group (AGENTS step 4). All market-data tests load the
 pinned files of §1a — no duplicated hardcoded market quotes. Math-note tests
 1–8 are incorporated below (references in parentheses).
 
+Before Phase 2 code relies on the Phase 1 pricer, add the finite-input
+regression tests specified in §2a to `tests/test_mini_pricer.cpp`. They are
+part of the red-first workflow even though they live in the existing test
+target. The `CouponPeriod` construction and payment-lag leg tests (group I)
+also live in `tests/test_mini_pricer.cpp`, since they extend the Phase 1
+rates layer.
+
 **A. Finance-free numerics**
 
 *Interpolator — the interview kata is the fixture:*
@@ -846,6 +996,10 @@ pinned files of §1a — no duplicated hardcoded market quotes. Math-note tests
     type, wrong quote unit, non-empty inapplicable field, NaN quote, duplicate
     ID, overlapping quarters, or duplicate tenor. A separate valid fixture
     with a negative OIS rate is accepted. No UTC-date-equality rule is tested.
+    A calendar-role regression asserts that 2026-04-03 (Good Friday) is a
+    `UnitedStates(Settlement)` business day but not a
+    `UnitedStates(SOFR)` fixing day, preventing the two CFTC calendar roles
+    from collapsing back into one calendar.
 18. **First pillar golden (math test 3):** with constructed inputs
     $A = 1.00045281574074$, $\tau = 91/360$, $R_{\mathrm{fut}} = 0.0430$:
     $P(0,T_e) = A/(1+\tau R) = 0.989695376825414$ within $10^{-12}$; the
@@ -894,8 +1048,11 @@ pinned files of §1a — no duplicated hardcoded market quotes. Math-note tests
     pillar DF, and an off-pillar grid (all futures/OIS accrual + payment dates):
     $\max_T|\delta_P(T)| \le 10^{-8}$. A missing required historical fixing is
     an error, not a warning.
-25. A 10Y par swap priced off both curves: PV and par-rate diffs within the
-    math note's combined abs/rel tolerance.
+25. A 10Y par swap priced off both curves: the hand-rolled side uses the
+    owner-specified payment-lag-capable component from §2a, with accrual and
+    payment dates represented separately; assert the two-USNY-business-day
+    payment dates directly, then compare PV and par-rate diffs within the math
+    note's combined abs/rel tolerance.
 
 **G. DV01 — required tier (math test 7)**
 
@@ -931,11 +1088,34 @@ pinned files of §1a — no duplicated hardcoded market quotes. Math-note tests
     bootstrap, Jacobian, and back-substitution transform and becomes the
     finite-difference reference for the post-MVP analytic Jacobian.
 
+**I. CouponPeriod + payment-lag legs (`tests/test_mini_pricer.cpp`; red
+before the §2a implementation)**
+
+34. `make_coupon_periods` golden over MLK: a USNY-settlement schedule period
+    ending Friday 2026-01-16 with a 2-business-day lag pays Wednesday
+    2026-01-21 (skipping the weekend and MLK Monday 2026-01-19); lag 0
+    returns `payment_date == accrual_end` unchanged; each `year_fraction`
+    equals the day counter's accrual over its own
+    `[accrual_start, accrual_end]`; periods built from a schedule are
+    contiguous.
+35. Validation throws: `make_coupon_periods` rejects a one-date schedule, an
+    empty day counter, and an empty calendar; the period-based leg
+    constructors reject empty periods, null dates,
+    `accrual_start >= accrual_end`, `payment_date < accrual_end`, non-finite
+    or non-positive year fractions, overlapping periods, and non-finite
+    notional/rate/spread.
+36. Delegation + lag effect: legs built from the Phase 1 constructors price
+    identically (PV and annuity within 1e-12) to legs built from the
+    equivalent zero-lag periods; the same fixed leg with a 2-USNY-day payment
+    lag has a strictly smaller PV on a positive flat curve (later payments
+    discount more).
+
 ## 6. CMake wiring
 
 ```cmake
 # extend the existing library
 target_sources(irc_pricing PRIVATE
+  src/rates/coupon_period.cpp
   src/core/linear_interpolator.cpp
   src/curves/curve_instruments.cpp
   src/curves/piecewise_log_linear_curve.cpp
@@ -954,6 +1134,7 @@ target_link_libraries(02_quantlib_sofr_curve_bootstrap PRIVATE
 
 add_executable(test_curve_bootstrap tests/test_curve_bootstrap.cpp)
 target_link_libraries(test_curve_bootstrap PRIVATE irc_pricing GTest::gtest_main)
+list(APPEND IRC_TEST_TARGETS test_curve_bootstrap)
 
 set(PHASE2_TEST_DATA_DIR "${CMAKE_CURRENT_BINARY_DIR}/test_data")
 file(MAKE_DIRECTORY "${PHASE2_TEST_DATA_DIR}")
@@ -975,26 +1156,30 @@ Tests form fixture paths from `IRC_TEST_DATA_DIR`; CMake supplies an absolute
 forward-slash path and copies the immutable source fixtures at configure
 time. All example file paths are explicit command-line arguments. No code
 searches parent directories or assumes a working directory.
+`IRC_TEST_TARGETS` is also the dependency list for the MSVC `coverage` target;
+every future CTest executable must be appended when it is added.
 
 ## 7. Build order (AGENTS workflow)
 
-1. **Owner approves these interfaces** — or edits them here first.
-   *(Rev 3's math-note gate is closed: the note now derives the partially
-   accrued first pillar, its inverse quote with positivity conditions, and
-   distinguishes the FD Jacobian stretch from the deferred analytic one.)*
-2. **Owner transcribes the real NY Fed fixings** into
-   `data/market/sofr_fixings_2025-12-17_2026-01-14.csv` (§1a TODO).
-3. AI materializes: headers exactly as approved, validation-only stubs,
-   `tests/test_curve_bootstrap.cpp`, and the pinned quotes CSV. Suite builds
-   and runs **red**.
-4. **Owner implements**, suggested order: bracketed bisection → interpolator →
-   curve → fixings + accumulation → loader → futures leg (incl. SR3Z25) →
-   OIS leg → deterministic output → direct DV01 — green through group G.
-5. AI reviews the green implementation, then shows its own diff.
-6. **Stretch:** owner implements the Jacobian path (group H), with the now-
+The math-note, interface-approval, and fixing-data gates are complete. The
+remaining order is:
+
+1. **Completed (2026-07-17):** AI materialized the approved headers,
+   validation-only stubs, `tests/test_curve_bootstrap.cpp`, the Phase 1
+   finite-input regression tests, and the pinned quotes CSV. The MSVC Release
+   build succeeds; 51 tests are discovered, with 17 validation/regression
+   tests green and 34 implementation tests intentionally red.
+2. **Current — owner implements**, suggested order: Phase 1 finite-input hardening →
+   bracketed bisection → interpolator → curve → fixings + accumulation →
+   loader → futures leg (including SR3Z25) → the approved `CouponPeriod` and
+   payment-lag-capable legs from §2a → OIS pricing → deterministic output →
+   direct DV01, green through group G. Each component's red tests must exist
+   before its implementation.
+3. AI reviews the green implementation, then shows its own diff.
+4. **Stretch:** owner implements the Jacobian path (group H), with the now-
    trusted direct DV01 as its reference.
-7. AI runs the QuantLib comparison and reports diffs.
-8. Owner commits on `phase-2-curves`; tag `v0.3-curve-dv01` when G is green
+5. AI runs the QuantLib comparison and reports diffs.
+6. Owner commits on `phase-2-curves`; tag `v0.3-curve-dv01` when G is green
    (H is not gating).
 
 ## 8. Deferred (tracked, not forgotten)
@@ -1010,5 +1195,5 @@ searches parent directories or assumes a working directory.
   finite-difference reference).
 - Futures convexity adjustment (needs a vol model — Phase 6+).
 - Curve extrapolation policy beyond the last pillar (throws for now).
-- Trade-file CSV input for portfolios (Phase 4 scope; Phase 2's CSVs are
+- Trade-file CSV input for portfolios (Phase 3 scope; Phase 2's CSVs are
   market quotes and fixings only).

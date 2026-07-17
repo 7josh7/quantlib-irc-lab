@@ -26,7 +26,9 @@ Phase 2, add a coverage report to the automated build. "70% line coverage"
 means the tests execute at least 70% of the executable lines under `src/`; it
 does **not** mean the code is 70% correct. Coverage exposes untested paths,
 while analytic checks and QuantLib comparisons establish numerical confidence.
-The repository does not measure coverage yet, so the current value is unknown.
+The current value is unknown. The MSVC coverage preset and target are
+configured; the first recorded report is produced after the Phase 2
+implementation is present.
 
 ## Reference roles across the roadmap
 
@@ -105,10 +107,10 @@ Implemented:
 - Simple-forward and projected daily-compounded accrual strategies.
 - Analytic sanity checks and a QuantLib `OvernightIndexedSwap` oracle.
 
-The implementation and 12 current tests are green. Before Phase 1 is fully
-"done" under this repository's definition, the owner should remove the
-remaining scaffold prompts and complete assumptions (including explicit scope
-boundaries) and inputs/outputs in `docs/math_notes/01_sofr_swap.md`.
+The implementation and 12 current tests are green, and the math note now states
+the implemented assumptions, scope boundaries, inputs, and outputs. The Phase 2
+implementation contract records finite-input regression hardening for these
+classes before the curve and risk code depends on them.
 
 Milestone: tag `v0.2-mini-pricer`.
 
@@ -142,6 +144,11 @@ fixture, then compute quote DV01 by complete bump-and-rebootstrap.
 **Acceptance:** calibration instruments reprice within the documented
 tolerances, discount factors are valid and positive, outputs are deterministic,
 and curve, PV, and DV01 results agree with the QuantLib benchmark.
+
+**Current gate:** the approved headers, validation-only stubs, pinned fixtures,
+and red tests are materialized. The MSVC Release build succeeds; the owner now
+implements from Phase 1 finite-input hardening through direct quote DV01, using
+the red groups in the implementation note as the executable specification.
 
 **Stretch:** finite-difference calibration Jacobian and two-way DV01
 cross-check. It is sequenced after direct quote DV01 is green and does not gate

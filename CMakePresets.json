@@ -15,6 +15,16 @@
         "CMAKE_TOOLCHAIN_FILE": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/vcpkg/scripts/buildsystems/vcpkg.cmake",
         "VCPKG_TARGET_TRIPLET": "x64-windows-static"
       }
+    },
+    {
+      "name": "vs2022-x64-static-coverage",
+      "displayName": "VS 2022 x64 static coverage",
+      "description": "Build with MSVC static native coverage instrumentation.",
+      "inherits": "vs2022-x64-static",
+      "binaryDir": "$env{USERPROFILE}/irc-coverage-build",
+      "cacheVariables": {
+        "IRC_ENABLE_MSVC_COVERAGE": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -23,6 +33,12 @@
       "displayName": "Release",
       "configurePreset": "vs2022-x64-static",
       "configuration": "Release"
+    },
+    {
+      "name": "coverage",
+      "displayName": "RelWithDebInfo coverage",
+      "configurePreset": "vs2022-x64-static-coverage",
+      "configuration": "RelWithDebInfo"
     }
   ],
   "testPresets": [
@@ -31,6 +47,15 @@
       "displayName": "Release tests",
       "configurePreset": "vs2022-x64-static",
       "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "coverage",
+      "displayName": "RelWithDebInfo coverage tests",
+      "configurePreset": "vs2022-x64-static-coverage",
+      "configuration": "RelWithDebInfo",
       "output": {
         "outputOnFailure": true
       }

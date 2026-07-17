@@ -12,8 +12,9 @@
 
 ## Scope
 
-This note covers the math for a **USD SOFR OIS swap** — the Phase 0
-hello-world deliverable. It is the foundation for everything in Phases 1–4.
+This note covers the math for the **USD SOFR OIS swap** used by the Phase 1
+hand-rolled mini pricer. It is the foundation for the later curve and risk
+phases.
 
 Key conventions to nail down here:
 
@@ -27,15 +28,17 @@ Key conventions to nail down here:
 
 ## 1. Instrument definition
 
-> *(Fill in: payment schedule, fixed leg, floating leg, notional, day
-> counts, business day convention, payment lag, look-back / lockout
-> conventions if used.)*
+The Phase 1 fixture is a five-year spot-starting swap with annual fixed and
+floating periods, Actual/360 accrual, Modified Following adjustment, and a
+notional of $1{,}000{,}000$. Its effective date is two business days after the
+valuation date. Both legs pay at the accrual-period end; payment lag, look-back,
+and lockout are deliberately excluded from this first implementation.
 
 Consider a collateralized fixed-for-floating interest rate swap observed at valuation time $t_0$.
 
 The trade has notional $N$, effective date $T_0$, maturity date $T^x_{M^x}$, and payment dates $T^x_i$ for $i \in [1, 2, \dots, M^x]$, where $x \in \{\mathrm{fix}, \mathrm{flt}\}$ labels the fixed and floating legs and $M^{\mathrm{fix}}$, $M^{\mathrm{flt}}$ are their respective numbers of payments.
 
-The swap exchanges a fixed leg against a floating leg. We take the perspective of a **fixed-rate recevier**, meaning the holder receives fixed coupons and pays floating coupons. The opposite sign convention gives the fixed-rate payer.
+The swap exchanges a fixed leg against a floating leg. We take the perspective of a **fixed-rate receiver**, meaning the holder receives fixed coupons and pays floating coupons. The opposite sign convention gives the fixed-rate payer.
 
 ### Collateralization and discounting
 
@@ -102,12 +105,6 @@ $$
 
 
 ## 2. Floating leg math
-
-> *(Fill in: geometric compounding formula from II §2.2,
-> $R_c = \frac{1}{\tau}\left[\prod_i (1 + \tau_i R_i) - 1\right]$,
-> and the approximation $R_c \approx \frac{1}{\tau}(\exp\int r\,du - 1)$.
-> Note that the rate is $\mathcal{F}(T_e)$-measurable, not
-> $\mathcal{F}(T_s)$.)*
 
 The floating leg references an index $\mathcal I$ over each floating accrual period
 
@@ -247,9 +244,6 @@ Common RFR conventions include:
 
 ## 3. Fixed leg math
 
-> *(Fill in: cash flow $\tau_i \cdot S$ per period, NPV, annuity
-> $A(t) = \sum_i \tau_i P^c(t, T_i)$ per II §3.2.2.)*
-
 The fixed leg pays a deterministic coupon on each fixed-leg payment date $T_i^{\mathrm{fix,pay}}$.
 
 For accrual period $[T_{i-1}^{\mathrm{fix}},T_i^{\mathrm{fix}}]$, define the fixed-leg year fraction
@@ -284,13 +278,8 @@ Typical fixed-leg conventions:
 - payment lag: usually $0$ or a small number of business days.
 ## 4. Swap valuation formula
 
-> *(Fill in: receiver NPV
-> $V^{\text{rec}}(t; S) = S \cdot A(t) - \sum_i \tau_i P^c(t, T_i)
-> \mathbb{E}_t^{T_i^c}[R^{\text{sofr}}(T_{i-1}, T_i)]$.
-> Show what simplifies when the projection curve and discount curve
-> coincide.)*
-
-Value of receiver swap is present value of fixed leg mimus present value of floating leg.  That is
+The value of a receiver swap is the present value of the fixed leg minus the
+present value of the floating leg. That is,
 $$
 V^{\text{rec}}(t; K) = N [K \cdot A_{\mathcal D}(t) - \sum_i \tau_i P_{\mathcal D}(t, T_i) \mathbb{E}_t^{T_i,\mathcal D}[R_{\text{sofr}}(T_{i-1}, T_i)]] 
 $$
@@ -368,9 +357,6 @@ unconditional equality.
 
 ## 5. Par swap rate
 
-> *(Fill in: $S^*(t) = $ floating-leg PV / annuity. State why this is
-> what a "par" or "spot-starting" SOFR swap quotes against.)*
-
 The par swap rate $S_t$ is defined by setting $V^{\mathrm{rec}}(t;S_t)=0$:
 
 $$
@@ -381,50 +367,47 @@ $$
 
 ## 6. Assumptions
 
-> *(Fill in. At minimum: perfect collateralization, SOFR collateral = SOFR
-> projection, day count convention, business day convention, no
-> convexity adjustment for OIS.)*
-
-perfect collateralization, SOFR collateral = SOFR
-
-day count convention: TBD (refer quantlib), 
-
-business day convention TBD (refer quantlib), 
-
-no convexity adjustment for OIS (add it later)
+- Perfect collateralization under SOFR, with the discount and projection curve
+  represented by the same deterministic curve.
+- Leg accrual uses Actual/360; curve time uses Actual/365 Fixed.
+- Schedules use the QuantLib `UnitedStates(SOFR)` calendar and Modified
+  Following adjustment for the pinned Phase 1 fixture.
+- The curve is flat at a continuously compounded rate of 4%.
+- Both legs pay at period end with zero payment lag and no look-back, lockout,
+  observation shift, or realized historical fixings.
+- No spread, multi-curve basis, or convexity adjustment is modeled.
 
 ## 7. Inputs / outputs (for the implementation)
 
-> *(Fill in what the pricer takes and returns. Example structure:)*
->
-> **Inputs:** valuation date, notional, fixed rate, schedule, day counter,
-> SOFR curve (discount + projection — same curve here).
->
-> **Outputs:** NPV, fair fixed rate, annuity, leg PVs.
+**Inputs:** reference/valuation dates used to construct the schedule, fixed and
+floating schedules, notional, fixed rate, optional floating spread, leg day
+counter, floating-rate accrual strategy, and the shared SOFR discount/projection
+curve.
 
-## 8. Known limitations
+**Outputs:** fixed-leg PV, floating-leg PV, fixed-leg annuity, receiver or payer
+swap NPV, and fair fixed rate.
 
-> *(Fill in. Examples to think about: no convexity adjustment for the
-> daily-compounded approximation; assumes SOFR collateral; no payment
-> lag / lock-out / look-back modeling in v1; flat curve only in
-> hello-world.)*
+## 8. Tests we'd want
 
-## 9. Tests we'd want
+- Discount at the reference date is one and the flat curve matches its closed
+  form.
+- Simple-forward and compounded-overnight strategies agree in the single-curve
+  setup, and the floating leg matches the telescoping identity.
+- The annuity equals $N\sum_i\tau_iP(t,T_i)$.
+- A swap struck at its fair rate has approximately zero NPV.
+- Receiver and payer NPVs have opposite signs.
+- NPV and fair rate agree with an otherwise identical QuantLib
+  `OvernightIndexedSwap`.
+- Invalid dates, schedules, day counters, non-positive notionals, null
+  strategies, and non-finite numeric inputs fail explicitly.
 
-> *(Fill in. Suggested:)*
->
-> - Par swap NPV ≈ 0 at fair rate.
-> - Receiver vs payer sign flip.
-> - Fair rate is positive and in plausible range for the given curve.
-> - Diff vs QuantLib `MakeOIS` on the same trade < 1e-6.
-> - Annuity equals sum of $\tau_i P^c(t, T_i)$ over fixed schedule.
+## 9. Open questions
 
-## 10. Open questions
+No open Phase 1 convention remains. A payment-lag-capable OIS cashflow
+representation is deferred to Phase 2, where the standard two-business-day
+delay is required.
 
-> *(Anything you want to flag before the implementer touches it. e.g.,
-> "Should we model payment lag in v1 or punt to Phase 2?")*
-
-## 11. Appendix
+## 10. Appendix
 
 ### Derivation of the Collateralized Forward-Rate Definition
 

@@ -5,6 +5,9 @@
 - Source II 3.3.1
 - Source II 3.4
 - QuantLib docs/examples
+- CFTC SOFR OIS specification — https://www.cftc.gov/PressRoom/PressReleases/8745-23
+- CME Three-Month SOFR futures specification —
+  https://www.cmegroup.com/education/articles-and-reports/understanding-sofr-futures
 - NY Fed SOFR publication — https://www.newyorkfed.org/markets/reference-rates/sofr
   (source of the historical fixings used in the deterministic hybrid fixture;
   publication timing and same-day revision window per this source, §Market Instruments)
@@ -81,7 +84,14 @@ forward. The strip is SR3Z25--SR3Z28 (13 consecutive contracts).
 ### OIS Swaps
 An OIS instrument $m$ is quoted at the par fixed rate $S_m$ that makes the fixed and floating legs have equal present value at inception. The fixed leg pays $S_m$ on an annual annuity; the floating leg pays the annualized business-day-compounded SOFR rate $R_{\mathrm{cmp}}^{\mathrm{SOFR}}(T_{i-1},T_i)$ over each accrual period. The medium-to-long end of the curve (4Y through 30Y here) is calibrated from these quotes. The leg present values, the model par rate, and the par-rate calibration condition are written out in the Calibration Equations section.
 
-For a standard USD SOFR OIS according to CFTC specification, payment dates are two business days after the corresponding accrual-period end dates. Thus $U_i$ and $V_j$ are obtained by advancing their respective period-end dates by two business days under the specified payment calendar.
+For a standard USD SOFR OIS according to the CFTC specification, the fixed-
+and floating-leg business calendar is New York (`USNY`), while the overnight
+fixing calendar is the U.S. Government Securities calendar (`USGS`). Payment
+dates are two USNY business days after the corresponding accrual-period end
+dates. Thus $U_i$ and $V_j$ are obtained by advancing their respective
+period-end dates by two business days under the USNY payment calendar. Daily
+SOFR observation dates and their calendar-day weights are determined under the
+USGS fixing calendar. These calendar roles are deliberately separate.
 
 The instrument specifications used are summarized below.
 
@@ -95,14 +105,15 @@ The instrument specifications used are summarized below.
 | Market quote | IMM price index $Q_m$ | Par fixed rate $S_m$ |
 | Rate conversion | $R_{\mathrm{fut},m}=(100-Q_m)/100$ | $S_m$ is already quoted as a decimal annual rate |
 | Underlying rate | Compounded daily SOFR over the contract reference quarter | Compounded daily SOFR over each OIS accrual period |
-| Start date | Contract-specific IMM reference-quarter start | Spot effective date, normally two business days after the trade date |
+| Start date | Contract-specific IMM reference-quarter start | Spot effective date, normally two USNY business days after the trade date |
 | End date | Contract-specific IMM reference-quarter end | Contractual OIS maturity date |
 | Accrual tenor | Approximately three months | Annual coupon periods for the maturities used here |
 | Day count | Actual/360 | Actual/360 for both legs |
-| Fixing calendar | U.S. Government Securities calendar | U.S. Government Securities calendar |
+| Business / payment calendar | Not applicable to the unadjusted IMM reference-quarter boundaries | New York (`USNY`) |
+| Fixing calendar | U.S. Government Securities (`USGS`) | U.S. Government Securities (`USGS`) |
 | Business-day convention | Determined by the CME reference-quarter specification | Modified Following |
 | Payment frequency | Final settlement for each futures contract, with daily variation margin before settlement | Annual fixed- and floating-leg payments |
-| Payment delay | Not represented as an OIS-style coupon payment delay | Two business days after each accrual-period end |
+| Payment delay | Not represented as an OIS-style coupon payment delay | Two USNY business days after each accrual-period end |
 | Fixed rate | Not applicable | Set to the par rate at inception |
 | Upfront payment | Futures margining applies | None for a par OIS at inception |
 | Convexity treatment | Ignored in Phase 2 | No separate futures convexity adjustment |
@@ -635,7 +646,9 @@ using QuantLibCurve = QuantLib::PiecewiseYieldCurve<
 
 Construct this curve with the same valuation date, `Actual365Fixed` curve day
 counter, market quotes, instrument dates, and conventions as the hand-rolled
-curve. Do not enable extrapolation.
+curve. Use the New York/USNY calendar for OIS scheduling and payment dates and
+the `Sofr` index's USGS calendar for overnight observations and fixings. Do not
+enable extrapolation.
 
 For a standard CME Three-Month SOFR future, use `SofrFutureRateHelper` with
 `Quarterly` frequency and a zero convexity adjustment. This is the
@@ -759,8 +772,9 @@ values live in the implementation note,
 - synthetic, internally consistent futures quotes: contract id, IMM
   reference-quarter start/end dates, and price $Q_m$;
 - synthetic, internally consistent OIS quotes: tenor and par rate $S_m$;
-- conventions: calendars, day counts (curve Act/365F, accrual Act/360),
-  spot lag, payment delay, business-day rule, interpolation choice.
+- conventions: USNY OIS business/payment calendar, USGS SOFR fixing calendar,
+  day counts (curve Act/365F, accrual Act/360), spot lag, payment delay,
+  business-day rule, and interpolation choice.
 
 Validation failures are explicit:
 
@@ -795,6 +809,8 @@ Outputs:
 - Pinned fixings use final published values and Act/360 calendar-day weights.
 - Missing historical fixings are errors and are never projected.
 - Historical fixings and realized accumulation remain immutable during calibration and DV01.
+- OIS spot, accrual, and payment dates use the USNY calendar; SOFR observation
+  and fixing dates use the USGS calendar.
 - SR3Z25 is partially accrued; all later futures are fully forward.
 - Futures quotes represent full-quarter compounded rates.
 - No futures convexity adjustment, deterministic single curve, clean SOFR collateralization, no basis or cross-currency effects.

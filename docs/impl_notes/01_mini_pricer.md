@@ -2,9 +2,9 @@
 
 > **Not a math note.** The math lives in
 > [`docs/math_notes/01_sofr_swap.md`](../math_notes/01_sofr_swap.md); this
-> file is the code-facing spec: conventions pinned, interfaces proposed,
-> tests planned. Per [AGENTS.md](../../AGENTS.md) workflow step 2, the
-> headers below are a **proposal for owner approval** — no `.cpp` yet.
+> file records the code-facing contract: conventions, approved interfaces,
+> tests, and build wiring. Phase 1 is implemented, its 12 tests are green, and
+> milestone `v0.2-mini-pricer` is tagged.
 
 ## 0. Scope (what v1 is and is not)
 
@@ -13,7 +13,7 @@ discount curve = projection curve, no spread, period-end payment (so §4's
 telescoping is exact). QuantLib supplies calendars / day counts / schedules;
 we hand-roll the pricing. QuantLib is the **oracle**, not the engine.
 
-Out of scope for v1 (deferred, tracked in the math note §8/§10): payment lag,
+Out of scope for v1 (recorded in the math note §6/§9): payment lag,
 look-back, lockout, multi-curve, convexity adjustment.
 
 ## 1. Conventions (pinned for the hello-world)
@@ -56,7 +56,7 @@ separate thing from the *curve* day count (Act/365F) — don't conflate them.
 | $V^{\text{rec}}$ | `VanillaSwap::npv()` with `SwapSide::Receiver` |
 | par $S_t$ | `VanillaSwap::fair_rate()` = float\_pv / `annuity()` |
 
-## 3. Proposed interfaces (headers only — TODO bodies)
+## 3. Implemented interfaces
 
 Layout follows the README repo map: `src/core/`, `src/rates/`. Dates,
 day counters and schedules are QuantLib types (AGENTS §QuantLib usage:
@@ -82,6 +82,13 @@ public:
     virtual double discount(const QuantLib::Date& d) const = 0;
 
     virtual QuantLib::Date reference_date() const = 0;
+
+protected:
+    YieldCurve() = default;
+    YieldCurve(const YieldCurve&) = default;
+    YieldCurve& operator=(const YieldCurve&) = default;
+    YieldCurve(YieldCurve&&) noexcept = default;
+    YieldCurve& operator=(YieldCurve&&) noexcept = default;
 };
 
 }  // namespace irc
@@ -103,8 +110,8 @@ public:
               double zero_rate,
               QuantLib::DayCounter day_counter);
 
-    double discount(const QuantLib::Date& d) const override;   // TODO
-    QuantLib::Date reference_date() const override;             // TODO
+    double discount(const QuantLib::Date& d) const override;
+    QuantLib::Date reference_date() const override;
 
 private:
     QuantLib::Date reference_;
@@ -133,13 +140,20 @@ public:
                                 const QuantLib::Date& start,
                                 const QuantLib::Date& end,
                                 double year_fraction) const = 0;
+
+protected:
+    RateAccrual() = default;
+    RateAccrual(const RateAccrual&) = default;
+    RateAccrual& operator=(const RateAccrual&) = default;
+    RateAccrual(RateAccrual&&) noexcept = default;
+    RateAccrual& operator=(RateAccrual&&) noexcept = default;
 };
 
 // IBOR-style simple forward:  F = (P(start)/P(end) - 1) / tau.   (note §4)
 class SimpleForwardRate final : public RateAccrual {
 public:
     double forward_rate(const YieldCurve&, const QuantLib::Date&,
-                        const QuantLib::Date&, double) const override;  // TODO
+                        const QuantLib::Date&, double) const override;
 };
 
 // SOFR daily-compounded overnight rate (note §2, RFR block). Iterates the
@@ -150,7 +164,7 @@ class CompoundedOvernightRate final : public RateAccrual {
 public:
     explicit CompoundedOvernightRate(QuantLib::Calendar calendar);
     double forward_rate(const YieldCurve&, const QuantLib::Date&,
-                        const QuantLib::Date&, double) const override;  // TODO
+                        const QuantLib::Date&, double) const override;
 private:
     QuantLib::Calendar calendar_;
 };
@@ -176,9 +190,9 @@ public:
              double fixed_rate);
 
     // PV = K * annuity()  =  N * K * sum_i tau_i P(t,T_i)
-    double present_value(const YieldCurve& curve) const;  // TODO
+    double present_value(const YieldCurve& curve) const;
     // annuity() = N * sum_i tau_i P(t,T_i)   (money per unit rate)
-    double annuity(const YieldCurve& curve) const;        // TODO
+    double annuity(const YieldCurve& curve) const;
 
 private:
     QuantLib::Schedule schedule_;
@@ -211,7 +225,7 @@ public:
                 double spread = 0.0);
 
     // PV = N * sum_i tau_i (F_i + s) P(t,T_i)
-    double present_value(const YieldCurve& curve) const;  // TODO
+    double present_value(const YieldCurve& curve) const;
 
 private:
     QuantLib::Schedule schedule_;
@@ -240,9 +254,9 @@ public:
     VanillaSwap(SwapSide side, FixedLeg fixed_leg, FloatingLeg floating_leg);
 
     // Receiver: fixed_pv - float_pv.  Payer: -(that).
-    double npv(const YieldCurve& curve) const;        // TODO
+    double npv(const YieldCurve& curve) const;
     // fair_rate = float_pv / annuity()   (side-independent)
-    double fair_rate(const YieldCurve& curve) const;  // TODO
+    double fair_rate(const YieldCurve& curve) const;
 
 private:
     SwapSide side_;
@@ -277,13 +291,14 @@ NPV is a meaningful nonzero number the oracle must reproduce).
 - Compounded mode → `OvernightIndexedSwap` built with `Sofr` index + the flat
   curve, priced by `DiscountingSwapEngine`. Assert `|npv_ours − npv_ql| < 1e-6`
   and `|fair_ours − fair_ql| < 1e-8`.
-- Simple mode → a `VanillaSwap`/`MakeVanillaSwap` with matching schedule as a
-  second oracle for `SimpleForwardRate`.
+
+The simple-forward path is covered independently by the closed-form
+telescoping test rather than a second QuantLib trade construction.
 
 If Test 7 misses, walk [AGENTS.md](../../AGENTS.md) §Numerical debugging
 protocol in order (df direction → day count → calendar) before flailing.
 
-## 5. CMake wiring (when implementations land)
+## 5. CMake wiring
 
 `.cpp` bodies go in `src/core/` and `src/rates/`; collect them into a static
 lib the tests and future examples link against:
@@ -303,12 +318,9 @@ target_link_libraries(test_mini_pricer PRIVATE irc_pricing GTest::gtest_main)
 gtest_discover_tests(test_mini_pricer)
 ```
 
-## 6. Build order (AGENTS workflow steps 2→6)
+## 6. Completed workflow
 
-1. **(this doc)** interfaces proposed → **owner approves**.
-2. Create the headers in `src/` exactly as approved.
-3. Write `tests/test_mini_pricer.cpp` (tests 1–7) against the headers.
-4. Implement the `.cpp` bodies until tests 1–6 pass.
-5. Wire the QuantLib oracle (test 7); report the diff.
-6. Owner reviews → commit on `phase-1-mini-pricer` → tag `v0.2-mini-pricer`.
-```
+1. The owner approved the interfaces.
+2. Headers and red tests were created before the implementation.
+3. The Phase 1 implementation and QuantLib oracle were completed.
+4. All 12 discovered tests passed and `v0.2-mini-pricer` was tagged.

@@ -1,0 +1,28 @@
+# Synthetic SOFR market snapshot - deterministic test fixture (hybrid:
+# fixings file carries the real data). NOT a market transcription.
+# As-of 2026-01-15T20:00:00Z (2026-01-15 3:00 p.m. ET).
+# UTC is the persisted timestamp convention; quote_unit is explicit.
+type,id,valuation_date,as_of_utc,start,end,quote,quote_unit
+valuation,,2026-01-15,2026-01-15T20:00:00Z,,,,
+future,SR3Z25,,,2025-12-17,2026-03-18,95.75,imm_price
+future,SR3H26,,,2026-03-18,2026-06-17,95.80,imm_price
+future,SR3M26,,,2026-06-17,2026-09-16,95.85,imm_price
+future,SR3U26,,,2026-09-16,2026-12-16,95.90,imm_price
+future,SR3Z26,,,2026-12-16,2027-03-17,95.95,imm_price
+future,SR3H27,,,2027-03-17,2027-06-16,96.00,imm_price
+future,SR3M27,,,2027-06-16,2027-09-15,96.03,imm_price
+future,SR3U27,,,2027-09-15,2027-12-15,96.06,imm_price
+future,SR3Z27,,,2027-12-15,2028-03-15,96.09,imm_price
+future,SR3H28,,,2028-03-15,2028-06-21,96.12,imm_price
+future,SR3M28,,,2028-06-21,2028-09-20,96.15,imm_price
+future,SR3U28,,,2028-09-20,2028-12-20,96.18,imm_price
+future,SR3Z28,,,2028-12-20,2029-03-21,96.20,imm_price
+ois,4Y,,,,,0.0375,decimal_rate
+ois,5Y,,,,,0.0370,decimal_rate
+ois,6Y,,,,,0.0365,decimal_rate
+ois,7Y,,,,,0.0360,decimal_rate
+ois,10Y,,,,,0.0350,decimal_rate
+ois,12Y,,,,,0.0345,decimal_rate
+ois,15Y,,,,,0.0340,decimal_rate
+ois,20Y,,,,,0.0335,decimal_rate
+ois,30Y,,,,,0.0330,decimal_rate

@@ -1,0 +1,24 @@
+# Official New York Fed SOFR effective-date observations.
+# Source: https://markets.newyorkfed.org/api/rates/secured/sofr/search.json
+# Query: startDate=2025-12-17&endDate=2026-01-14&type=rate
+# Retrieved 2026-07-16; percentRate divided by 100 to store decimal rates.
+rate_date,rate
+2025-12-17,0.0369
+2025-12-18,0.0366
+2025-12-19,0.0366
+2025-12-22,0.0368
+2025-12-23,0.0366
+2025-12-24,0.0366
+2025-12-26,0.0376
+2025-12-29,0.0377
+2025-12-30,0.0371
+2025-12-31,0.0387
+2026-01-02,0.0375
+2026-01-05,0.0370
+2026-01-06,0.0366
+2026-01-07,0.0365
+2026-01-08,0.0364
+2026-01-09,0.0364
+2026-01-12,0.0364
+2026-01-13,0.0365
+2026-01-14,0.0364

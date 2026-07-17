@@ -44,3 +44,7 @@ docs/quantlib_cheatsheet.md
 
 # Logs
 *.log
+
+# Coverage reports
+*.coverage
+*.cobertura.xml

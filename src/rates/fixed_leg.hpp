@@ -1,8 +1,11 @@
 #pragma once
 #include "core/yield_curve.hpp"
+#include "rates/coupon_period.hpp"
 
 #include <ql/time/daycounter.hpp>
 #include <ql/time/schedule.hpp>
+
+#include <vector>
 
 namespace irc {
 
@@ -12,6 +15,7 @@ class FixedLeg {
 public:
     FixedLeg(QuantLib::Schedule schedule, QuantLib::DayCounter day_counter, double notional,
              double fixed_rate);
+    FixedLeg(std::vector<CouponPeriod> periods, double notional, double fixed_rate);
 
     // PV = fixed_rate * annuity(curve).
     double present_value(const YieldCurve& curve) const;
@@ -23,8 +27,10 @@ public:
 private:
     QuantLib::Schedule schedule_;
     QuantLib::DayCounter day_counter_;
+    std::vector<CouponPeriod> periods_;
     double notional_;
     double fixed_rate_;
+    bool uses_periods_;
 };
 
 }  // namespace irc

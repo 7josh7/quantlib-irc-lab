@@ -19,25 +19,13 @@ int main() try {
     Handle<YieldTermStructure> discount_curve(ext::make_shared<FlatForward>(
         settlement_date, flat_rate, curve_day_counter, Compounded, Annual));
 
-    const Schedule fixed_schedule(
-        settlement_date,
-        maturity_date,
-        Period(Annual),
-        calendar,
-        ModifiedFollowing,
-        ModifiedFollowing,
-        DateGeneration::Forward,
-        false);
+    const Schedule fixed_schedule(settlement_date, maturity_date, Period(Annual), calendar,
+                                  ModifiedFollowing, ModifiedFollowing, DateGeneration::Forward,
+                                  false);
 
-    const Schedule floating_schedule(
-        settlement_date,
-        maturity_date,
-        Period(Quarterly),
-        calendar,
-        ModifiedFollowing,
-        ModifiedFollowing,
-        DateGeneration::Forward,
-        false);
+    const Schedule floating_schedule(settlement_date, maturity_date, Period(Quarterly), calendar,
+                                     ModifiedFollowing, ModifiedFollowing, DateGeneration::Forward,
+                                     false);
 
     const auto libor_3m = ext::make_shared<USDLibor>(Period(3, Months), discount_curve);
     const Date first_fixing_date = libor_3m->fixingDate(floating_schedule[0]);
@@ -45,16 +33,9 @@ int main() try {
         libor_3m->addFixing(first_fixing_date, flat_rate);
     }
 
-    VanillaSwap swap(
-        VanillaSwap::Payer,
-        1'000'000.0,
-        fixed_schedule,
-        0.04,
-        Thirty360(Thirty360::BondBasis),
-        floating_schedule,
-        libor_3m,
-        0.0,
-        Actual360());
+    VanillaSwap swap(VanillaSwap::Payer, 1'000'000.0, fixed_schedule, 0.04,
+                     Thirty360(Thirty360::BondBasis), floating_schedule, libor_3m, 0.0,
+                     Actual360());
 
     swap.setPricingEngine(ext::make_shared<DiscountingSwapEngine>(discount_curve));
 

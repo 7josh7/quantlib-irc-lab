@@ -22,12 +22,13 @@ until that MVP is reproducible.
 | Phase | State | Evidence / next gate |
 |---|---|---|
 | 0 — Environment | Implementation complete | MSVC/CMake/vcpkg build, legacy QuantLib swap scaffold, GoogleTest wiring; no standalone `v0.1-env` tag was retained |
-| 1 — Mini pricer | Implementation complete | 12 green tests, analytic checks, QuantLib SOFR OIS comparison, tag `v0.2-mini-pricer`; owner math-note cleanup remains |
-| 2 — SOFR curve + quote DV01 | Current | Owner completes `02_curve_bootstrapping.md` before interfaces, red tests, or implementation |
+| 1 — Mini pricer | Implementation complete | 12 green tests, analytic checks, QuantLib SOFR OIS comparison, tag `v0.2-mini-pricer`; finite-input hardening is recorded as a Phase 2 prerequisite |
+| 2 — SOFR curve + quote DV01 | Current | Red-test scaffold builds: 51 tests discovered, 17 validation/regression tests green and 34 implementation tests intentionally red; next gate is owner implementation, starting with finite-input hardening |
 | 3 — Portfolio risk report | Planned | Produces the four MVP CSVs after Phase 2 is green |
 
-Automated line-coverage measurement is not configured yet; the current
-coverage percentage is unknown. Phase 2 adds the first coverage report.
+MSVC static native line coverage is configured with a 70% threshold over
+`src/`. The current percentage is not recorded until the coverage target is
+run against a build containing the Phase 2 implementation.
 
 See [docs/roadmap.md](docs/roadmap.md) for the full plan.
 
@@ -118,6 +119,37 @@ The preset writes build output to:
 C:\Users\<you>\irc-build
 ```
 
+### Coverage
+
+The coverage preset uses Microsoft's recommended static native
+instrumentation (`/PROFILE`) and writes a Cobertura report containing only
+lines under `src/`. It fails when line coverage is below 70%. See Microsoft's
+[Visual Studio coverage documentation](https://learn.microsoft.com/en-us/visualstudio/test/using-code-coverage-to-determine-how-much-code-is-being-tested?view=vs-2022)
+for the collector and static-instrumentation requirements.
+
+Visual Studio 2022 Community 17.14 can build and run this repository's tests,
+but it does not expose the native coverage data collector used by this target.
+Run the coverage target with Visual Studio Enterprise or on a Windows CI image
+that includes that collector; there is no Community installer checkbox named
+**Code coverage tools**.
+
+```powershell
+cmake --preset vs2022-x64-static-coverage
+cmake --build --preset coverage --target coverage
+```
+
+The report is written to:
+
+```text
+C:\Users\<you>\irc-coverage-build\coverage\coverage.cobertura.xml
+```
+
+Override the threshold at configure time only when the roadmap changes:
+
+```powershell
+cmake --preset vs2022-x64-static-coverage -DIRC_COVERAGE_MIN_LINE_PERCENT=75
+```
+
 Expected output from the retained Phase 0 **legacy LIBOR scaffold**:
 
 ```text
@@ -137,6 +169,8 @@ The current repository is intentionally slim. Planned `data/`, `curves/`,
 quantlib-irc-lab/
   CMakeLists.txt
   CMakePresets.json
+  cmake/
+    run_msvc_coverage.ps1
   vcpkg.json
   README.md
   AGENTS.md

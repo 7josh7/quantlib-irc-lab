@@ -20,8 +20,11 @@ FixedLeg::FixedLeg(QuantLib::Schedule schedule, QuantLib::DayCounter day_counter
     if (day_counter_.empty()) {
         throw std::invalid_argument("FixedLeg: day counter is empty");
     }
-    if (notional_ <= 0.0) {
-        throw std::invalid_argument("FixedLeg: notional must be positive");
+    if (notional_ <= 0.0 || !std::isfinite(notional_)) {
+        throw std::invalid_argument("FixedLeg: notional must be positive and finite");
+    }
+    if (!std::isfinite(fixed_rate_)) {
+        throw std::invalid_argument("FixedLeg: rate must be finite");
     }
 }
 

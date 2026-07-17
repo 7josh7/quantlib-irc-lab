@@ -21,11 +21,14 @@ FloatingLeg::FloatingLeg(QuantLib::Schedule schedule, QuantLib::DayCounter day_c
     if (day_counter_.empty()) {
         throw std::invalid_argument("FloatingLeg: day counter is empty");
     }
-    if (notional_ <= 0.0) {
-        throw std::invalid_argument("FloatingLeg: notional must be positive");
+    if (notional_ <= 0.0 || !std::isfinite(notional_)) {
+        throw std::invalid_argument("FloatingLeg: notional must be positive and finite");
     }
     if (!accrual_) {
         throw std::invalid_argument("FloatingLeg: accrual strategy is null");
+    }
+    if (!std::isfinite(spread_)) {
+        throw std::invalid_argument("FloatingLeg: spread must be finite");
     }
 }
 

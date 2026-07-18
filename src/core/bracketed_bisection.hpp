@@ -4,7 +4,12 @@
 #include <concepts>
 #include <cstddef>
 #include <functional>
+#include <iomanip>
+#include <limits>
+#include <numeric>
+#include <sstream>
 #include <stdexcept>
+#include <string_view>
 #include <type_traits>
 
 namespace irc {
@@ -42,8 +47,55 @@ BisectionResult bracketed_bisection(F&& residual, double lower, double upper,
         throw std::invalid_argument("bracketed_bisection: max_iterations must be positive");
     }
 
-    (void)residual;
-    throw std::logic_error("bracketed_bisection: not implemented (Phase 2 step 4)");
+    double f_lower = std::invoke(residual, lower);
+    double f_upper = std::invoke(residual, upper);
+    const auto make_bracket_message = [&](std::string_view reason) {
+        std::ostringstream message;
+        message << std::setprecision(std::numeric_limits<double>::max_digits10)
+                << "bracketed_bisection: " << reason << ": lower=" << lower
+                << ", f(lower)=" << f_lower << ", upper=" << upper << ", f(upper)=" << f_upper;
+        return message.str();
+    };
+
+    if (!std::isfinite(f_lower) || !std::isfinite(f_upper)) {
+        throw std::runtime_error(make_bracket_message("non-finite endpoint residual"));
+    }
+    if (std::abs(f_lower) <= options.residual_tolerance) {
+        return BisectionResult{lower, f_lower, 0};
+    }
+    if (std::abs(f_upper) <= options.residual_tolerance) {
+        return BisectionResult{upper, f_upper, 0};
+    }
+    if (std::signbit(f_lower) == std::signbit(f_upper)) {
+        throw std::runtime_error(make_bracket_message("interval does not bracket a root"));
+    }
+    for (std::size_t index = 0; index < options.max_iterations; ++index) {
+        const std::size_t iteration = index + 1;
+        const double mid = std::midpoint(lower, upper);
+        const double f_mid = std::invoke(residual, mid);
+        if (!std::isfinite(f_mid)) {
+            std::ostringstream reason;
+            reason << std::setprecision(std::numeric_limits<double>::max_digits10)
+                   << "non-finite midpoint residual at iteration=" << iteration
+                   << ", midpoint=" << mid << ", residual=" << f_mid;
+            throw std::runtime_error(make_bracket_message(reason.str()));
+        }
+        if (std::abs(f_mid) <= options.residual_tolerance) {
+            return BisectionResult{mid, f_mid, iteration};
+        }
+        if (std::signbit(f_lower) != std::signbit(f_mid)) {
+            upper = mid;
+            f_upper = f_mid;
+        } else {
+            lower = mid;
+            f_lower = f_mid;
+        }
+    }
+    std::ostringstream reason;
+    reason << std::setprecision(std::numeric_limits<double>::max_digits10)
+           << "maximum iterations exhausted after " << options.max_iterations
+           << " midpoint evaluations, residual_tolerance=" << options.residual_tolerance;
+    throw std::runtime_error(make_bracket_message(reason.str()));
 }
 
 }  // namespace irc

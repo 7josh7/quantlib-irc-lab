@@ -321,9 +321,14 @@ stateful calculation through the same one-argument contract. This avoids
 global state and avoids adding finance-specific parameters to the solver.
 The forwarding-reference parameter accepts named or temporary callables
 without a mandatory copy; the `ScalarResidual` concept validates the contract
-at compile time. A template also avoids the type erasure of `std::function`
-and the virtual dispatch of a solver/residual inheritance hierarchy; the
-solver requires no heap allocation or polymorphic-object ownership.
+at compile time. That concept checks `std::invocable<F&, double>` (lvalue),
+not bare `F`, because the solver invokes the named `residual` parameter as an
+lvalue on every iteration; validating bare `F` would admit rvalue-only
+callables that then fail to compile inside the loop. (Language mechanics:
+[`docs/cpp_notes.md`](../cpp_notes.md).) A template also avoids the type
+erasure of `std::function` and the virtual dispatch of a solver/residual
+inheritance hierarchy; the solver requires no heap allocation or
+polymorphic-object ownership.
 
 The bootstrapper owns the two-stage forward-rate bracket rule in §1. It captures
 the candidate-instrument state in a lambda, maps each financial bracket to node

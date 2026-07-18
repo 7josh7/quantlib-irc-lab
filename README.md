@@ -18,7 +18,11 @@ and everything past that is roadmap-only until the MVP works.
 
 ## Status
 
-Phase 0: environment setup. QuantLib hello-swap example and smoke test build.
+| Phase | State | Evidence / next gate |
+|---|---|---|
+| 0 — Environment | Complete | MSVC/CMake/vcpkg build, QuantLib hello-swap example, and GoogleTest smoke test |
+| 1 — Mini pricer | Complete | 12 green tests, analytic checks, QuantLib SOFR OIS comparison, and tag `v0.2-mini-pricer` |
+| 2 — SOFR curve + quote DV01 | In progress on `phase-2-curves` | Not yet merged into `main` |
 
 See [docs/roadmap.md](docs/roadmap.md) for the full plan.
 

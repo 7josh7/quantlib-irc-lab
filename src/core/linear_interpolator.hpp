@@ -9,6 +9,9 @@ namespace irc {
 // Vectorized piecewise-linear interpolator with flat extrapolation.
 // Knots xs (strictly increasing) each carry m = ys.size()/xs.size() outputs,
 // stored row-major: ys = {y(x0)[0..m), y(x1)[0..m), ...}.
+// evaluate() returns queries.size()*m values, row-major per query.
+// Queries need not be sorted. Outside [xs.front(), xs.back()] the end
+// values are returned unchanged (flat extrapolation).
 class LinearFlatInterpolator {
 public:
     LinearFlatInterpolator(std::vector<double> xs, std::vector<double> ys);

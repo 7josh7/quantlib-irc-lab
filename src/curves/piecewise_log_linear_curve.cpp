@@ -1,5 +1,6 @@
 #include "curves/piecewise_log_linear_curve.hpp"
 
+#include <array>
 #include <cmath>
 #include <stdexcept>
 #include <utility>
@@ -88,7 +89,10 @@ double PiecewiseLogLinearCurve::discount(const QuantLib::Date& d) const {
         throw std::invalid_argument(
             "PiecewiseLogLinearCurve::discount: date is beyond last pillar");
     }
-    throw std::logic_error("PiecewiseLogLinearCurve::discount: not implemented (Phase 2 step 4)");
+    const double time = day_counter_.yearFraction(reference_, d);
+    const std::array<double, 1> query{time};
+    const std::vector<double> log_discounts = interpolator_.evaluate(query);
+    return std::exp(log_discounts.front());
 }
 
 QuantLib::Date PiecewiseLogLinearCurve::reference_date() const {
@@ -111,7 +115,15 @@ PiecewiseLogLinearCurve bump_node(const PiecewiseLogLinearCurve& curve, std::siz
     if (!std::isfinite(delta)) {
         throw std::invalid_argument("bump_node: delta must be finite");
     }
-    throw std::logic_error("bump_node: not implemented (Phase 2 step 4)");
+    const std::span<const CurveNode> nodes = curve.nodes();
+    std::vector<CurveNode> pillars(nodes.begin() + 1, nodes.end());
+    const std::size_t pillar_index = node_index - 1;
+    const double bumped_log_discount = pillars[pillar_index].log_discount + delta;
+    if (!std::isfinite(bumped_log_discount)) {
+        throw std::invalid_argument("bump_node : bumped log discount must be finite");
+    }
+    pillars[pillar_index].log_discount = bumped_log_discount;
+    return PiecewiseLogLinearCurve(curve.reference_date(), std::move(pillars), curve.day_counter());
 }
 
 }  // namespace irc

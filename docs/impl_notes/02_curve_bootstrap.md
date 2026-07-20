@@ -7,6 +7,12 @@
 > under [AGENTS.md](../../AGENTS.md) workflow step 2.
 > Per step 4, the owner implements; AI writes the red tests and stubs.
 >
+> Revision 10 — signed payment lag (2026-07-19): `make_coupon_periods` takes
+> `QuantLib::Integer` (matching QuantLib's own `paymentLag` parameters)
+> instead of `Natural`, so a negative lag arrives intact and is rejected with
+> `std::invalid_argument` rather than wrapping to a large unsigned value;
+> test 35 gains the negative-lag rejection.
+>
 > Revision 9 — owner-approved `CouponPeriod` interface (2026-07-17): pins the
 > exact §2a header (`src/rates/coupon_period.hpp`), its validation contract,
 > the zero-lag delegation rule, the CMake source line, and the group I red
@@ -390,7 +396,7 @@ any query is non-finite.
 namespace irc {
 
 // One coupon accrual period with its (possibly delayed) payment date.
-// Accrual boundaries are never replaced by the payment date (§2a); the
+// Accrual boundaries are never replaced by the payment date (Section 2a); the
 // stored year_fraction is the leg day counter's accrual over
 // [accrual_start, accrual_end], so pricing never re-derives it.
 struct CouponPeriod {
@@ -406,18 +412,22 @@ struct CouponPeriod {
 //   payment_date  = payment_calendar.advance(accrual_end, lag, Days)
 //   year_fraction = day_counter.yearFraction(accrual_start, accrual_end)
 // payment_lag_business_days == 0 returns payment_date == accrual_end
-// unchanged — the builder never calls advance(d, 0, Days), because QuantLib
+// unchanged - the builder never calls advance(d, 0, Days), because QuantLib
 // defines that as adjust(d), which could silently move an unadjusted date.
+// The lag is signed (as in QuantLib's own paymentLag parameters) so a
+// negative input arrives intact and throws std::invalid_argument instead of
+// wrapping to a large Natural.
 std::vector<CouponPeriod> make_coupon_periods(const QuantLib::Schedule& schedule,
                                               const QuantLib::DayCounter& day_counter,
                                               const QuantLib::Calendar& payment_calendar,
-                                              QuantLib::Natural payment_lag_business_days);
+                                              QuantLib::Integer payment_lag_business_days);
 
 }  // namespace irc
 ```
 
 `make_coupon_periods` throws `std::invalid_argument` on a schedule with fewer
-than two dates, an empty day counter, or an empty calendar.
+than two dates, an empty day counter, an empty calendar, or a negative
+payment lag.
 
 The period-based leg constructors are added to the existing Phase 1 headers:
 
@@ -1104,8 +1114,8 @@ before the §2a implementation)**
     `[accrual_start, accrual_end]`; periods built from a schedule are
     contiguous.
 35. Validation throws: `make_coupon_periods` rejects a one-date schedule, an
-    empty day counter, and an empty calendar; the period-based leg
-    constructors reject empty periods, null dates,
+    empty day counter, an empty calendar, and a negative payment lag; the
+    period-based leg constructors reject empty periods, null dates,
     `accrual_start >= accrual_end`, `payment_date < accrual_end`, non-finite
     or non-positive year fractions, overlapping periods, and non-finite
     notional/rate/spread.

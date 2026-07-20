@@ -256,6 +256,8 @@ TEST_F(MiniPricerTest, CouponPeriodAndPeriodLegValidationRejectBadInputs) {
         std::invalid_argument);
     EXPECT_THROW((void)irc::make_coupon_periods(annual_schedule(), leg_dc_, ql::Calendar(), 2),
                  std::invalid_argument);
+    EXPECT_THROW((void)irc::make_coupon_periods(annual_schedule(), leg_dc_, payment_calendar, -1),
+                 std::invalid_argument);
 
     const ql::Date start(15, ql::January, 2026);
     const ql::Date end(16, ql::January, 2026);

@@ -5,36 +5,34 @@
 #include <utility>
 
 namespace irc {
+namespace {
+std::vector<CouponPeriod> make_fixed_zero_lag_periods(const QuantLib::Schedule& schedule,
+                                                      const QuantLib::DayCounter& day_counter) {
+    if (schedule.size() < 2) {
+        throw std::invalid_argument("FixedLeg: schedule needs at least 2 dates");
+    }
+    if (day_counter.empty()) {
+        throw std::invalid_argument("FixedLeg: day counter is empty");
+    }
+    std::vector<CouponPeriod> periods;
+    periods.reserve(schedule.size() - 1);
+
+    for (QuantLib::Size i = 1; i < schedule.size(); ++i) {
+        const QuantLib::Date& start = schedule[i - 1];
+        const QuantLib::Date& end = schedule[i];
+
+        periods.push_back(CouponPeriod{start, end, end, day_counter.yearFraction(start, end)});
+    }
+    return periods;
+}
+}  // namespace
 
 FixedLeg::FixedLeg(QuantLib::Schedule schedule, QuantLib::DayCounter day_counter, double notional,
                    double fixed_rate)
-    : schedule_(std::move(schedule)),
-      day_counter_(std::move(day_counter)),
-      periods_(),
-      notional_(notional),
-      fixed_rate_(fixed_rate),
-      uses_periods_(false) {
-    if (schedule_.size() < 2) {
-        throw std::invalid_argument("FixedLeg: schedule needs at least 2 dates");
-    }
-    if (day_counter_.empty()) {
-        throw std::invalid_argument("FixedLeg: day counter is empty");
-    }
-    if (notional_ <= 0.0 || !std::isfinite(notional_)) {
-        throw std::invalid_argument("FixedLeg: notional must be positive and finite");
-    }
-    if (!std::isfinite(fixed_rate_)) {
-        throw std::invalid_argument("FixedLeg: rate must be finite");
-    }
-}
+    : FixedLeg(make_fixed_zero_lag_periods(schedule, day_counter), notional, fixed_rate) {}
 
 FixedLeg::FixedLeg(std::vector<CouponPeriod> periods, double notional, double fixed_rate)
-    : schedule_(),
-      day_counter_(),
-      periods_(std::move(periods)),
-      notional_(notional),
-      fixed_rate_(fixed_rate),
-      uses_periods_(true) {
+    : periods_(std::move(periods)), notional_(notional), fixed_rate_(fixed_rate) {
     if (periods_.empty()) {
         throw std::invalid_argument("FixedLeg: periods must not be empty");
     }
@@ -67,27 +65,19 @@ FixedLeg::FixedLeg(std::vector<CouponPeriod> periods, double notional, double fi
 }
 
 double FixedLeg::present_value(const YieldCurve& curve) const {
-    if (uses_periods_) {
-        throw std::logic_error("FixedLeg period-based pricing: not implemented (Phase 2 step 4)");
-    }
     // PV = K * annuity.  Math note §3.
     return fixed_rate_ * annuity(curve);
 }
 
 double FixedLeg::annuity(const YieldCurve& curve) const {
-    if (uses_periods_) {
-        throw std::logic_error("FixedLeg period-based annuity: not implemented (Phase 2 step 4)");
-    }
-    // annuity = N * sum_i tau_i * P(t, T_i), payment date T_i = schedule_[i]
-    // (payment lag 0 in v1). Math note §3 A(t), scaled by the notional.
+    // annuity = N * sum_i tau_i * P(t, U_i), where U_i is payment_date.
+    // Includes the notional; the math note's A(t) is per-notional.
     double sum = 0.0;
-    for (QuantLib::Size i = 1; i < schedule_.size(); ++i) {
-        const QuantLib::Date& period_start = schedule_[i - 1];
-        const QuantLib::Date& payment = schedule_[i];
-        const double tau = day_counter_.yearFraction(period_start, payment);
+    for (const CouponPeriod& period : periods_) {
+        const QuantLib::Date& payment = period.payment_date;
+        const double tau = period.year_fraction;
         sum += tau * curve.discount(payment);
     }
     return notional_ * sum;
 }
-
 }  // namespace irc

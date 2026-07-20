@@ -25,12 +25,9 @@ public:
     double annuity(const YieldCurve& curve) const;
 
 private:
-    QuantLib::Schedule schedule_;
-    QuantLib::DayCounter day_counter_;
     std::vector<CouponPeriod> periods_;
     double notional_;
     double fixed_rate_;
-    bool uses_periods_;
 };
 
 }  // namespace irc

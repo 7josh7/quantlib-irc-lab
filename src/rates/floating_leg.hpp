@@ -25,13 +25,10 @@ public:
     double present_value(const YieldCurve& curve) const;
 
 private:
-    QuantLib::Schedule schedule_;
-    QuantLib::DayCounter day_counter_;
     std::vector<CouponPeriod> periods_;
     double notional_;
     std::shared_ptr<const RateAccrual> accrual_;
     double spread_;
-    bool uses_periods_;
 };
 
 }  // namespace irc

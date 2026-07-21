@@ -625,10 +625,14 @@ namespace irc {
 // (described below) names the instrument ID, rate date, or as-of field.
 SofrMarketData load_sofr_market_data(
     const std::filesystem::path& quotes_csv,
-    const std::filesystem::path& fixings_csv = {});
+    const std::filesystem::path& fixings_csv);
 
 }  // namespace irc
 ```
+
+Both paths are explicit. An empty `fixings_csv` is accepted only when no
+future is partially accrued on `valuation_date`; otherwise the loader rejects
+the input before bootstrapping.
 
 Parsing is strict: exactly one header and valuation row; no missing or extra
 fields; dates, timestamps, and numbers must consume the complete field;

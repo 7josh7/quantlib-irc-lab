@@ -386,7 +386,8 @@ TEST(MarketDataIoTest, LoadsPinnedSnapshotAndRejectsMalformedCopies) {
     const std::vector<std::string> malformed{
         replace_once(source, "valuation,,2026-01-15,2026-01-15T20:00:00Z,,,,",
                      "valuation,,2026-01-15,,,,,"),
-        replace_once(source, "2026-01-15T20:00:00Z", "2026-01-15T20:00:00"),
+        replace_once(source, "valuation,,2026-01-15,2026-01-15T20:00:00Z,,,,",
+                     "valuation,,2026-01-15,2026-01-15T20:00:00,,,,"),
         replace_once(source, "future,SR3Z25", "unknown,SR3Z25"),
         replace_once(source, "95.75,imm_price", "95.75,decimal_rate"),
         replace_once(source, "future,SR3Z25,,,", "future,SR3Z25,2026-01-15,,"),
@@ -405,11 +406,68 @@ TEST(MarketDataIoTest, LoadsPinnedSnapshotAndRejectsMalformedCopies) {
         "negative_ois.csv", replace_once(source, "0.0375,decimal_rate", "-0.0010,decimal_rate"));
     EXPECT_NO_THROW((void)irc::load_sofr_market_data(negative_ois, fixings));
 
+    EXPECT_THROW((void)irc::load_sofr_market_data(fixture_path("sofr_quotes_2026-01-15.csv"),
+                                                  std::filesystem::path{}),
+                 std::runtime_error);
+    const auto fully_forward =
+        write_test_file("fully_forward_quotes.csv",
+                        replace_once(source, "valuation,,2026-01-15,2026-01-15T20:00:00Z,,,,",
+                                     "valuation,,2025-12-16,2025-12-16T20:00:00Z,,,,"));
+    const auto fully_forward_market =
+        irc::load_sofr_market_data(fully_forward, std::filesystem::path{});
+    EXPECT_TRUE(fully_forward_market.fixings.empty());
+
     const ql::Calendar usny{ql::UnitedStates(ql::UnitedStates::Settlement)};
     const ql::Calendar usgs{ql::UnitedStates(ql::UnitedStates::SOFR)};
     const ql::Date good_friday(3, ql::April, 2026);
     EXPECT_TRUE(usny.isBusinessDay(good_friday));
     EXPECT_FALSE(usgs.isBusinessDay(good_friday));
+}
+
+// The malformed-copy test proves the loader rejects bad input. This one
+// proves it puts good input in the right slots, which nothing else in the
+// suite can: the QuantLib benchmark builds its rate helpers from the same
+// SofrMarketData, so a transposed field or a dropped row would corrupt both
+// sides of that comparison identically and still agree.
+TEST(MarketDataIoTest, ParsesPinnedSnapshotIntoTheRightFields) {
+    const auto market = load_pinned_market();
+
+    ASSERT_EQ(market.futures.size(), 13);
+    EXPECT_EQ(market.futures.front().id, "SR3Z25");
+    EXPECT_EQ(market.futures.front().reference_start, ql::Date(17, ql::December, 2025));
+    EXPECT_EQ(market.futures.front().reference_end, ql::Date(18, ql::March, 2026));
+    EXPECT_DOUBLE_EQ(market.futures.front().price, 95.75);
+    EXPECT_EQ(market.futures[6].id, "SR3M27");
+    EXPECT_DOUBLE_EQ(market.futures[6].price, 96.03);
+    EXPECT_EQ(market.futures.back().id, "SR3Z28");
+    EXPECT_EQ(market.futures.back().reference_end, ql::Date(21, ql::March, 2029));
+    EXPECT_DOUBLE_EQ(market.futures.back().price, 96.20);
+
+    ASSERT_EQ(market.ois.size(), 9);
+    EXPECT_EQ(market.ois.front().id, "4Y");
+    EXPECT_EQ(market.ois.front().tenor, ql::Period(4, ql::Years));
+    EXPECT_DOUBLE_EQ(market.ois.front().par_rate, 0.0375);
+    EXPECT_EQ(market.ois[4].tenor, ql::Period(10, ql::Years));
+    EXPECT_DOUBLE_EQ(market.ois[4].par_rate, 0.0350);
+    EXPECT_EQ(market.ois.back().tenor, ql::Period(30, ql::Years));
+    EXPECT_DOUBLE_EQ(market.ois.back().par_rate, 0.0330);
+
+    ASSERT_EQ(market.fixings.size(), 19);
+    EXPECT_EQ(market.fixings.front().rate_date, ql::Date(17, ql::December, 2025));
+    EXPECT_DOUBLE_EQ(market.fixings.front().rate, 0.0369);
+    EXPECT_EQ(market.fixings.back().rate_date, ql::Date(14, ql::January, 2026));
+    EXPECT_DOUBLE_EQ(market.fixings.back().rate, 0.0364);
+
+    // Christmas and New Year are absent from the published series. Pinning the
+    // rows on either side of each gap catches a dropped or reordered fixing,
+    // which a size check alone cannot: losing one row and gaining another
+    // leaves the count at 19.
+    EXPECT_EQ(market.fixings[5].rate_date, ql::Date(24, ql::December, 2025));
+    EXPECT_EQ(market.fixings[6].rate_date, ql::Date(26, ql::December, 2025));
+    EXPECT_DOUBLE_EQ(market.fixings[6].rate, 0.0376);
+    EXPECT_EQ(market.fixings[9].rate_date, ql::Date(31, ql::December, 2025));
+    EXPECT_EQ(market.fixings[10].rate_date, ql::Date(2, ql::January, 2026));
+    EXPECT_DOUBLE_EQ(market.fixings[10].rate, 0.0375);
 }
 
 TEST(SofrBootstrapperTest, FirstPartiallyAccruedPillarMatchesGoldenAndInverse) {

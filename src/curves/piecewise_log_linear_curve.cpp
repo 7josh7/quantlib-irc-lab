@@ -120,7 +120,7 @@ PiecewiseLogLinearCurve bump_node(const PiecewiseLogLinearCurve& curve, std::siz
     const std::size_t pillar_index = node_index - 1;
     const double bumped_log_discount = pillars[pillar_index].log_discount + delta;
     if (!std::isfinite(bumped_log_discount)) {
-        throw std::invalid_argument("bump_node : bumped log discount must be finite");
+        throw std::invalid_argument("bump_node: bumped log discount must be finite");
     }
     pillars[pillar_index].log_discount = bumped_log_discount;
     return PiecewiseLogLinearCurve(curve.reference_date(), std::move(pillars), curve.day_counter());

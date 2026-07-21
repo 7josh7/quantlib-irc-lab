@@ -5,7 +5,8 @@ obvious from reading the code. It is a language guide, not an API guide (see
 `docs/quantlib_cheatsheet.md`) and not a math note.
 
 Current scope: the generic solver interface in
-`src/core/bracketed_bisection.hpp`, approved in
+`src/core/bracketed_bisection.hpp`, and the parameter/member conventions in
+the `src/rates` leg classes. Both are approved in
 `docs/impl_notes/02_curve_bootstrap.md` §3.
 
 The main idea:
@@ -16,9 +17,10 @@ T&  /  T&&           = lvalue reference / rvalue reference
 reference collapsing = what happens when a reference lands on a reference
 forwarding reference = the special T&& that binds to both categories
 concept              = a compile-time yes/no question about a type
+const T& vs shared_ptr = borrow for one call vs own for the object's lifetime
 ```
 
-None of this is beginner material. Forwarding references and reference
+The forwarding-reference material is not beginner material. Reference
 collapsing occupy an entire chapter of Meyers' *Effective Modern C++*
 (Items 23-30), and the standard did not adopt the term "forwarding
 reference" until C++17. Concepts are C++20. Do not expect it to feel obvious.
@@ -38,6 +40,12 @@ Concepts — TOUR (C++20; PRIMER predates these entirely)
   §8.2      Concepts
   §8.3      Generic Programming
   §14.5     Concepts Overview (the standard library's own concepts)
+
+Parameter passing and ownership — PRIMER
+  §6.2      Argument Passing (by value vs by reference)
+  §12.1     Dynamic Memory and Smart Pointers
+  Ch. 13    Copy Control (and the rule of zero)
+  Ch. 15    Object-Oriented Programming (abstract bases, slicing)
 ```
 
 The split is deliberate. PRIMER derives *why* `F&` collapses the way it does;
@@ -495,6 +503,69 @@ Fix: drop the `const` on `r`, so `F` deduces to `Lam&`; or drop `mutable`.
 Relevant when writing the OIS calibration lambda — if it is made `mutable` to
 cache state, it must not also be declared `const`.
 
+## Passing and Storing Polymorphic Types
+
+Both `YieldCurve` and `RateAccrual` are abstract bases, so both need a
+reference or a pointer to avoid slicing. Polymorphism alone does not decide
+which one. Usage and lifetime semantics do.
+
+Example:
+
+```cpp
+// src/rates/floating_leg.hpp
+double present_value(const YieldCurve& curve) const;   // parameter
+std::shared_ptr<const RateAccrual> accrual_;           // member
+```
+
+Read it as:
+
+```text
+used only during the call       ->  const T&
+object shares its lifetime      ->  shared_ptr<const T>
+```
+
+`curve` is an argument to one operation. A leg is the same leg whichever
+curve prices it, so the curve is an input to the question, not part of the
+object. `accrual_` is stored, so the leg must keep it alive for as long as
+the leg itself exists.
+
+Why the accrual is not a reference member:
+
+- a reference cannot be rebound, so the implicitly generated assignment
+  operator is deleted;
+- nothing enforces that the referent outlives the leg;
+- a leg built from a temporary strategy dangles silently.
+
+`shared_ptr<const RateAccrual>` supplies shared lifetime and lets one
+`CompoundedOvernightRate` back many legs while keeping `FloatingLeg` copyable.
+`unique_ptr` would instead express exclusive ownership and make `FloatingLeg`
+move-only unless explicit cloning were added. The `const` prevents mutation
+through this pointer; it does not by itself prove that the strategy is
+stateless or thread-safe.
+
+Why the curve is not a smart pointer: taking a `shared_ptr` by value would
+impose shared ownership on callers who may hold the curve on the stack or as a
+member, and it would update the reference count on every call. Taking a
+`shared_ptr` by const reference would avoid that update but would still expose
+an ownership mechanism that the function does not use. This is C++ Core
+Guidelines F.7 ("take `T*` or `T&` arguments rather than smart pointers") and
+R.30 (take smart pointers as parameters only to express lifetime semantics).
+
+The bootstrap makes the asymmetry concrete. Each bisection iteration builds a
+fresh candidate curve and reprices the swap against it:
+
+```text
+leg    built once, outside the solver loop   -> accrual fixed  -> member
+curve  rebuilt on every iteration inside it  -> varies per call -> parameter
+```
+
+Storing the curve would mean rebuilding or mutating the leg for each candidate
+curve. Passing a `shared_ptr` by value would add reference-count operations
+throughout that repricing loop for no lifetime benefit.
+
+For this owning relationship, a reference member is the wrong tool: it removes
+ordinary assignment while providing no lifetime management.
+
 ## Summary
 
 ```text
@@ -503,6 +574,9 @@ Forwarding ref deduces lvalue -> A&, rvalue -> A, so F carries value category.
 F&& therefore mirrors the argument: accepts both, copies neither.
 F& therefore normalizes to A& always: one consistent lvalue check.
 Named parameters are lvalues, so the lvalue check is the honest one.
+
+Borrowed for one call -> const T&.  Shared lifetime -> shared_ptr<const T>.
+Abstract base decides you need indirection; lifetime semantics decide its form.
 ```
 
 Used in this repo for:
@@ -510,4 +584,6 @@ Used in this repo for:
 - `bracketed_bisection`'s callable parameter and its `ScalarResidual`
   constraint (`src/core/bracketed_bisection.hpp`);
 - the OIS calibration lambda that captures instrument state and exposes it
-  through the scalar residual contract.
+  through the scalar residual contract;
+- `present_value(const YieldCurve&)` in both leg types versus the stored
+  `shared_ptr<const RateAccrual>` in `src/rates/floating_leg.hpp`.

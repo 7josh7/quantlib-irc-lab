@@ -7,6 +7,13 @@
 > under [AGENTS.md](../../AGENTS.md) workflow step 2.
 > Per step 4, the owner implements; AI writes the red tests and stubs.
 >
+> Revision 11 — serializer test strategy (2026-07-21): test 22 is split into a
+> byte-exact format check and a tolerance check on the numeric columns,
+> because `std::exp` is not required to be correctly rounded and byte
+> comparison would pin the suite to one platform's libm. `output/curve.csv`
+> remains byte-deterministic for a given input on a given toolchain (§1a);
+> what changes is what the *test* asserts, not what the writer guarantees.
+>
 > Revision 10 — signed payment lag (2026-07-19): `make_coupon_periods` takes
 > `QuantLib::Integer` (matching QuantLib's own `paymentLag` parameters)
 > instead of `Natural`, so a negative lag arrives intact and is rejected with
@@ -1050,10 +1057,18 @@ rates layer.
 
 **E. Deterministic output**
 
-22. `serialize_curve_csv` for a tiny known-node curve equals one exact golden
-    string, including number formatting, blank anchor fields, `\n` endings,
-    and the final newline; a non-Act/365F curve is rejected rather than
-    mislabeled.
+22. `serialize_curve_csv` for a tiny known-node curve is checked in two
+    halves. **Format** is byte-exact: header, the anchor row, five fields per
+    row, the ISO date shape, a fixed 22-character scientific field width
+    (one mantissa digit, 16 fraction digits, two-digit exponent), blank
+    anchor fields, `\n` endings, and the final newline. Byte comparison runs
+    through the anchor row because `t = 0` and `exp(0) = 1` are exact in
+    IEEE-754. **Values** are compared to their closed forms at `1e-15`:
+    `std::exp` is not required by the standard or IEEE-754 to be correctly
+    rounded, so byte-comparing a column derived from it would pin the suite
+    to one platform's libm rather than to the serializer. A non-Act/365F
+    curve is rejected rather than mislabeled. (Diagnostic rule:
+    [`docs/numerical_debug_checklist.md`](../numerical_debug_checklist.md).)
 23. `write_curve_csv` round-trips those exact bytes through a test-owned
     temporary directory and throws when its parent directory does not exist.
 

@@ -14,13 +14,17 @@ Phases 8–10.
 
 ## Hard rules
 
-1. **The repo owner writes the math note. You do not.** If a math note
-   for the module does not exist in `docs/math_notes/`, stop and say so.
-   Do not generate the math note yourself. The whole point of the project is that the owner learns the math.
+1. **The repo owner decides the content of the math note.** If a math note for
+   the module does not exist in `docs/math_notes/`, stop and say so. An AI may
+   apply or revise decisions that the owner has explicitly provided, including
+   prose and formatting changes. It must not invent mathematical or scope
+   decisions, or complete note sections that the owner has not addressed. The
+   point of the project is that the owner learns and controls the math.
 
 2. **No implementation before a math note exists** for that module. The
-   note must cover at minimum: formula, assumptions, inputs, outputs,
-   known limitations.
+   note must cover at minimum: formula, assumptions (including explicit scope
+   boundaries), inputs, and outputs. Scope boundaries may be recorded with the
+   assumptions; a separate `Known Limitations` section is not required.
 
 3. **Every pricer has a unit test before merge.** Every numerical method
    has either an analytic sanity check or a QuantLib comparison.
@@ -114,20 +118,11 @@ move, stop and ask.
 
 ## Numerical debugging protocol
 
-When a pricer/model fails to match its benchmark, walk this checklist
-**in order** before flailing:
-
-1. Seed reproducibility — same seed gives same output?
-2. Discount factor — sign and direction (df at t=0 should be 1.0)?
-3. Drift sign — under which measure are we?
-4. Vol scaling — is vol per year or per period? sqrt(dt) applied?
-5. Measure consistency — pricing measure matches numeraire choice?
-6. Numeraire — divided/multiplied correctly?
-7. Day count — actual/360 vs 30/360 vs actual/365?
-8. Calendar — business day adjustment direction?
-
-This list lives at `docs/numerical_debug_checklist.md` once we have
-debugging to do. Add new entries as we hit them.
+When a pricer/model fails to match its benchmark, walk the checklist at
+`docs/numerical_debug_checklist.md` **in order** before flailing. Section A
+covers model and convention (measure, drift sign, day count, calendar);
+section B covers floating point and the machine, and is only worth reading
+once section A is clean. Add new entries as we hit them.
 
 ## What "done" means for a phase
 

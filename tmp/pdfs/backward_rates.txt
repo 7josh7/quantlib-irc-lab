@@ -1,0 +1,1081 @@
+        Looking Forward to Backward-Looking Rates:
+           Completing the Generalized Forward Market Model
+
+                        Andrei Lyashenko1 and Fabio Mercurio2
+                          1
+                              Quantitative Risk Management, Inc.
+                                      2
+                                        Bloomberg, L.P.∗
+
+
+
+                                               Abstract
+          In this paper, we show how the generalized Forward Market Model (FMM) intro-
+      duced by Lyashenko and Mercurio (2019a) can be extended to make it a complete
+      term-structure model describing the evolution of all points on a yield curve, and not
+      just of a spanning set of forward term rates. The extended model is both theoreti-
+      cally sound and computationally efficient. Because the FMM is an extension of the
+      popular LIBOR Market Model (LMM), it can be also used to complete the yield
+      curve evolution under existing LMM implementations.
+
+
+1     Introduction
+Lyashenko and Mercurio (2019a) extended the concept of forward term rates to encompass
+both the traditional forward-looking (LIBOR-like) rates and the new setting-in-arrears
+backward-looking rates, which are expected to replace LIBORs as the reference rates in
+derivative contracts. The extended forward term rate: i) is defined for all times, ii) is equal
+to the realized forward-looking rate at the start of the application period, iii) continues to
+evolve within the application period, iv) settles to the realized backward-looking rate at the
+end of the application period, and v) is a martingale under the forward measure associated
+with the end of the application period. Lyashenko and Mercurio then showed that the
+classic interest-rate modeling framework can be naturally augmented to model the extended
+forward term rates. This holds, in particular, for the LIBOR Market Model (LMM), whose
+extension, called the generalized Forward Market Model (FMM), specifies the dynamics of
+forward rates also within their application periods, thus providing information about the
+rates evolution that is not directly available in the LMM. Another important advantage
+   ∗
+     The views and opinions expressed in this article are our own and do not represent the opinions of any
+firm or institution. Bloomberg LP and Bloomberg Professional service are trademarks and service marks
+of Bloomberg Finance L.P., a Delaware limited partnership, or its subsidiaries. All rights reserved.
+
+
+                                                    1
+of the FMM over the LMM is that rates can be modeled in the (continuous) risk-neutral
+measure.
+    In this paper, we show that the additional information about the rates dynamics pro-
+vided by the FMM can be used to infer the evolution of generic term rates as well as the
+short rate, and not just the given set of spanning term rates. The ability to jointly model
+and simulate all points on a yield curve is crucial for the applicability of the model to the
+pricing and hedging of large heterogeneous portfolios such as a banking book consisting
+of a large variety of complex instruments such as mortgages or mortgage backed securi-
+ties. Moreover, to be able to price variable-rate instruments such as floating-rate notes
+and adjustable-rate mortgages indexed by compounded overnight rates, we also need to
+simulate the bank account value in addition to the forward-rate curve.
+    To obtain the evolution of all points on the yield curve, we “embed” the FMM into a
+(finite-dimensional) Markovian Heath, Jarrow and Morton (HJM) model with separable
+volatility structure by aligning the HJM and FMM dynamics of the forward term rates
+modeled by the FMM. This FMM-aligned HJM model is effectively a hybrid between
+an instantaneous forward-rate model and a LMM, and shares the advantages of both
+approaches, with the caveat that the number of variables to simulate (that is, the given
+forward rates supplemented by the state variables in the Markovian representation) could
+be too high.
+    Alternatively, instead of using the FMM-aligned HJM model directly, one could use
+the zero-bond pricing formulas available under a separable HJM to derive new formulas
+expressing the price of an arbitrary zero-bond, as well as the bank account, as a function
+of the modeled forward term rates and their volatilities. In this FMM-HJM construct,
+FMM acts as a “coarse” model capturing a “macro” structure of the market such as the
+covariance structure of the set of modeled rates, while the FMM-aligned HJM serves as
+a finer modeling environment used to fill the gaps left by the coarser FMM. This two-
+step approach of modeling forward term rates and then filling the gaps with the help of
+a finer model has advantages over directly modeling and simulating the overnight rates
+because term rates are less noisy and have liquid derivative markets directly linked to
+them, including both linear derivatives such as futures, FRAs and swaps and options such
+as caps and swaptions. Similar two-level, coarse-fine, modeling approaches are used in
+other areas of science and engineering, such as macro- and micro-economic modeling.
+    The problem of recovering the whole yield curve evolution from the modeled set of LI-
+BOR rates has been extensively discussed in the LMM literature, and is often referred to as
+LIBOR-rate interpolation, or front- and back-stub interpolations. The main references are
+the works of Schlögl (2002), Piterbarg (2004), Beveridge and Joshi (2009), Werpachowski
+(2010), and chapter 15 of Andersen and Piterbarg (2010).1 Some of these approaches, how-
+ever, are ad-hoc in nature, some may lead to unrealistic interpolations, and some others
+are not even arbitrage free. By contrast, the approach proposed in this paper is theoret-
+ically and practically sound, and arbitrage-free by construction. In fact, the formulas we
+  1
+    Description of more recent attempts to refine LMM dynamics to extract finer information about rate
+evolution can be found in Fries (2019).
+
+
+                                                  2
+derive are of the same level of complexity as the Gaussian-model interpolation suggested
+by Andersen and Piterbarg (2010).
+    As a final point, we want to stress that although the FMM was originally proposed
+as an extension of the LMM to model backward-looking term rates, it is highly beneficial
+to switch from LMM to FMM regardless of the transition to the new rates. Indeed: a)
+FMM embeds LMM by preserving LIBOR dynamics, b) it can be calibrated to LIBOR
+caps and swaptions using the same (or similar) analytical pricing formulas, c) it provides
+additional information about the rates evolution within each accrual period, which can be
+used, as shown in this paper, to complete the curve in a conceptually-sound and efficient
+way, (d) converting an existing LMM implementation into its FMM extension is quite
+straightforward and fast, and (e) our tests, including production implementation, show
+that an FMM is as robust and efficient as an LMM.
+
+
+2     Definitions and notation
+We assume a single-curve framework where interest rates are risk free. The instantaneous
+risk-free rate at time t is denoted by r(t), and is the the rate at which an associated
+money-market (or bank) account B(t) accrues continuously starting from B(0) = 1, that
+is:
+                                   dB(t) = r(t)B(t) dt                               (1)
+so                                                   Rt
+                                        B(t) = e 0 r(u) du
+     We assume the existence of a risk-neutral measure Q, whose associated numeraire is
+B(t), and denote by E the expectation with respect to Q, and by Ft the sigma-algebra
+generated by the model risk factors up time t.
+     We consider a time structure 0 = T0 , T1 , . . . , TM , and denote by τj the year fraction for
+the interval [Tj−1 , Tj ). For each time t, we define η(t) = min{j : Tj ≥ t}, which is the
+index of the element of the time structure that is the closest to time t being equal to or
+greater than t.
+     We then denote by P (t, T ) the price at time t of the extended zero-coupon bond with
+maturity T . Introduced by Lyashenko and Mercurio (2019a), the extended bond price
+P (t, T ) is the time-t value of the self-financing strategy that consists of buying a classic
+zero-coupon bond with maturity T , and reinvesting the proceeds of the bond’s unit notional
+at the risk-free rate r(t) from time T onwards. In particular, we have that P (t, 0) = B(t)
+for each time t. Denoting the instantaneous forward rate at time t with maturity T by
+f (t, T ), extended bond prices, like classic bond prices, can be written as
+                                                      RT
+                                     P (t, T ) = e− t f (t,u) du                               (2)
+
+provided that we define f (t, u) = r(u) when t ≥ u.
+
+
+
+                                                 3
+    As explained by Lyashenko and Mercurio (2019a), an extended zero-coupon bond is a
+viable numeraire. The probability measure QT associated with P (t, T ) is called (extended)
+T -forward measure.
+    Based on Lyashenko and Mercurio (2019a), for each j = 1, . . . , M , we define the forward
+term rate with application period [Tj−1 , Tj ) as:
+                                                         
+                                         1 P (t, Tj−1 )
+                               Rj (t) =                 −1                                 (3)
+                                         τj P (t, Tj )
+
+    Forward rate Rj (t) is a QTj -martingale and is defined for each time t: i) for t ≤ Tj−1 ,
+it coincides with the classic single-curve simply-compounded forward rate associated to
+[Tj−1 , Tj ); ii) at time Tj−1 , it gives the fixing of the forward-looking term rate Rj (Tj−1 ); iii)
+at time Tj , it gives the fixing of the backward-looking setting in-arrears spot rate Rj (Tj );
+iv) for t ≥ Tj , Rj (t) = Rj (Tj ). Notice that inside the application period, that is when
+t ∈ (Tj−1 , Tj ), by definition of extended bond price we have:
+                                               " R t r(u) du   #
+                                            1 e Tj−1
+                                   Rj (t) =                  −1                                       (4)
+                                            τj    P (t, Tj )
+
+
+3       The Generalized Forward Market Model (FMM)
+The generalized FMM introduced by Lyashenko and Mercurio (2019a) postulates the fol-
+lowing dynamics of each forward rate Rj (t) under the risk-neutral measure Q:
+                                          j
+                                          X             τi σi (t)γi (t)
+                 dRj (t) = σj (t)γj (t)          ρi,j                   dt + σj (t)γj (t) dWj (t)     (5)
+                                           i=1
+                                                        1 + τi Ri (t)
+
+where, for each i, j = 1, . . . , M , σj (t) is an adapted process, Wj (t) is a standard Q-Brownian
+motion such that dWi (t) dWj (t) = ρi,j dt, and γj (t) is a (piece-wise) differentiable (deter-
+ministic) function such that: γj (t) = 1 for t ≤ Tj−1 , γj (t) is monotonically decreasing in
+[Tj−1 , Tj ] and γj (t) = 0 for t ≥ Tj .2
+    Since γi (t) = 0 for t > Ti , dynamics (5) are equivalent to:
+                                          j
+                                          X               τi σi (t)γi (t)
+                 dRj (t) = σj (t)γj (t)            ρi,j                   dt + σj (t)γj (t) dWj (t)   (6)
+                                                          1 + τi Ri (t)
+                                          i=η(t)
+    2
+    A more general formulation, covering for instance the case of the Hull-White (1994) two-factor model,
+could be introduced by replacing σj (t) with an n-dimensional square matrix, γj (t) with an n-dimensional
+vector and Wj (t) with an n-dimensional vector as well. This, however, would excessively burden the
+notation providing little benefit to the analysis that follows.
+
+
+
+
+                                                            4
+3.1    Using a vector notation
+Processes σj (t) and Brownian motions Wj (t) are one-dimensional. A vector notation can
+be introduced as follows, where we assume that vectors are column vectors, and denote by
+A| the transpose of matrix A.
+    Denoting by ρ the instantaneous correlation matrix of (W1 (t), . . . , WM (t))| , that is
+ρ = (ρi,j )i,j=1,...,M , and denoting by N ≤ M the rank of ρ, there exist an N -dimensional
+Brownian motion W̄ (t) = (W̄1 (t), . . . , W̄N (t))| and an M × N matrix C such that ρ = CC |
+and
+                                (dW1 (t), . . . , dWM (t))| = C dW̄ (t)
+Therefore, we can write:
+                                        j
+                                        X                    τi γi (t)
+             dRj (t) = γj (t)σjR (t)|            σiR (t)                 dt + γj (t)σjR (t)| dW̄ (t)    (7)
+                                                           1 + τi Ri (t)
+                                        i=η(t)
+
+
+where, for each j = 1, . . . , N , σjR (t) is the N -dimensional adapted process defined by:
+
+                                            σjR (t)| = σj (t)Cj                                         (8)
+
+where Cj is the j-th row of C, and where we notice that ρi,j = Ci Cj| . From (8), it
+immediately follows that
+
+                         σiR (t)| σjR (t) = σi (t)Ci Cj| σj (t) = ρi,j σi (t)σj (t)                     (9)
+
+In particular:
+                                          σjR (t)| σjR (t) = σj2 (t)                                   (10)
+   Hereafter, with some slight abuse of notation, we will drop the bar in W̄ , thus writing
+W (t) instead of W̄ (t).
+
+
+4     An extended Markovian HJM
+Heath, Jarrow and Morton (1992) assumed that, for a fixed maturity T , the instantaneous
+forward rate f (t, T ) evolves, under the risk-neutral measure Q, according to:
+                                                 Z T
+                                            |
+                     df (t, T ) = σ(t, T )             σ(t, s) ds dt + σ(t, T )| dW (t)                (11)
+                                                  t
+
+with initial condition f (0, T ) given by market, and where σ(t, T ) is an N -dimensional
+vector of adapted processes, and W is an N -dimensional Q-Brownian motion.
+    In the classic HJM framework, for each T , volatility σ(t, T ), and hence process f (t, T ),
+are defined for t ≤ T . Therefore, for (2) to hold for extended bond prices as well, we extend
+
+
+
+                                                           5
+dynamics (11) to times t after T by zeroing the volatility of forward rate f (t, T ) for t ≥ T .
+We thus assume:
+                                            Z T                                
+                                           |                             |
+              df (t, T ) = 1{t≤T } σ(t, T )      σ(t, s) ds dt + σ(t, T ) dW (t)
+                                                        t
+
+The indicator function 1{t≤T } has the effect of making the process constant after time T :
+f (t, T ) = r(T ) when t ≥ T . This way, f (t, T ) is defined for all pairs (t, T ), and (2) also
+holds for t > T .
+     As in the classic HJM framework, the application of Ito’s lemma and Fubini’s theorem
+leads to the following risk-neutral dynamics of extended zero-coupon bond prices:
+                                             Z T                 |
+                      dP (t, T )
+                                 = r(t) dt −      σ(t, u)1{t≤u} du dW (t)                    (12)
+                       P (t, T )               t
+
+In particular, when t > T , this SDE reduces to:
+
+                                             dP (t, T )
+                                                        = r(t) dt
+                                             P (t, T )
+
+which is consistent with the definition of extended bond prices at valuation times t subse-
+quent to the bond’s maturity T .
+    Using (12), we can derive the Q-dynamics of the generalized forward rate Rj (t). We
+get:
+                                              Z Tj                  !|
+                                           1
+             dRj (t) = · · · dt + Rj (t) +            σ(t, u)1{t≤u} du dW (t)
+                                           τj    Tj−1
+                                              Z Tj ∨t            !|                  (13)
+                                           1
+                     = · · · dt + Rj (t) +               σ(t, u) du dW (t)
+                                           τj    Tj−1 ∨t
+
+
+4.1     A Markovian HJM matching the FMM
+Our goal is to construct a Markovian HJM model that generates dynamics of extended
+forward rates Rj , j = 1, . . . , M , that are equivalent to the FMM ones. To this end, we first
+match (13) with (7), obtaining:
+                                                      Z Tj ∨t              !|
+                                                   1
+                      γj (t)σjR (t)| = Rj (t) +                   σ(t, u) du               (14)
+                                                   τj     Tj−1 ∨t
+
+
+for all j = 1, . . . , M , or equivalently:
+                                              Z Tj ∨t                        
+                                                                           1
+                           σjR (t)γj (t) =             σ(t, u) du Rj (t) +                  (15)
+                                               Tj−1 ∨t                     τj
+
+
+                                                            6
+   Then, similarly to Cheyette (2001), we assume that the instantaneous forward-rate
+volatility is given by the following separable form:
+                                                 M
+                                                 X
+                                   σ(t, T ) =          ςk (t) gk (T ) 1{T ∈(Tk−1 ,Tk ]}
+                                                 k=1
+                                                                                                                (16)
+                                            = ςη(T ) (t) gη(T ) (T )
+
+where, for each k = 1, . . . , M , ςk is an N -dimensional adapted process and gk is a deter-
+ministic function.
+   Setting                                       Z                   T
+                                           Gk (t, T ) =                  gk (u) du
+                                                                 t
+we notice that
+            Z Tj ∨t                              Z Tj ∨t
+                           σ(t, u) du = ςj (t)              gj (u) du = ςj (t)Gj (Tj−1 ∨ t, Tj ∨ t)
+                 Tj−1 ∨t                          Tj−1 ∨t
+
+So, (15) becomes:
+                                                                                                 
+                                                                                               1
+                            σjR (t)γj (t) = ςj (t)Gj (Tj−1 ∨ t, Tj ∨ t)               Rj (t) +                  (17)
+                                                                                               τj
+
+Assuming, with no loss of generality, that Gj (Tj−1 , Tj ) = 1, equality (17) is satisfied, for
+instance, when the deterministic and stochastic components of both sides match:
+
+                                          γj (t) = Gj (Tj−1 ∨ t, Tj ∨ t)
+                                                                     
+                                           R                       1
+                                         σj (t) = ςj (t) Rj (t) +
+                                                                   τj
+
+This leads to
+                                                   d
+                                     gj (t) = −       γj (t),            t ∈ (Tj−1 , Tj )
+                                                   dt
+                                                              1                                                 (18)
+                                      ςj (t) = σjR (t)
+                                                         Rj (t) + τ1j
+
+Therefore, choosing the instantaneous forward-rate volatilities as in (16), with the deter-
+ministic functions gj and processes ςj defined by (18), gives the postulated FMM dynamics
+(7).3
+     3
+       The solution (18) is not unique. For any other decay function γ̄j (t) and rate volatility σ̄jR (t) such that
+   R
+σ̄j (t)γ̄j (t) = σjR (t)γj (t), a different solution can be obtained by replacing γj (t) with γ̄j (t) and σjR (t) with
+σ̄jR (t) in (18). The choice of (18) is motivated by the particular case where the FMM is derived from a
+given one-factor Markovian HJM model. In this case, in fact, (18) leads to exactly the same initial HJM
+dynamics the FMM has been obtained from.
+
+
+                                                             7
+   The value of each function gj (t) outside its corresponding interval (Tj−1 , Tj ) can be set
+to be zero, so (16) can be simplified to:
+                                                      M
+                                                      X
+                                        σ(t, T ) =           ςk (t) gk (T )                         (19)
+                                                       k=1
+
+and we can still write that σ(t, T ) = ςη(T ) (t) gη(T ) (T ).
+    The same representation in the classic LMM case presents the issue that σ(t, T ) is only
+defined for pairs (t, T ) such that t ≤ Tη(T )−1 , and not for all t ≤ T . This issue is addressed
+by our generalized FMM. In fact, ςj (t) is now defined up to the end Tj of the corresponding
+application interval. Therefore, the HJM volatility σ(t, T ), as given by (16) is defined for
+all pairs (t, T ) such that t ≤ T .
+
+4.2     Forward-rate dynamics and zero-coupon bond pricing
+As shown in Appendix A, the integrated Q-dynamics of f (t, T ) can be expressed as follows:
+                         (
+                          f (0, T ) + g(T )| X(t) + g(T )| Y (t)G(t, T ) if t < T
+             f (t, T ) =                                                               (20)
+                          r(T ) = f (0, T ) + g(T )| X(T )               if t ≥ T
+
+where
+                                  dX(t) = Y (t)g(t) dt + ς(t) dW (t)
+                                                                                                    (21)
+                                  dY (t) = ς(t) ς(t)| dt
+
+with X(0) = 0 and Y (0) = 0, and where we denote by:
+   • g(T ) the vector {g1 (T ), . . . , gM (T )}|
+   • G(t, T ) the vector {G1 (t, T ), . . . , GM (t, T )}|
+   • X(t) the vector {X1 (t), . . . , XM (t)}|
+   • Y (t) the M × M -matrix (Yk,h (t))k,h=1,...,M
+   • ς(t) the M × N -matrix (ςk (t)| )k=1,...,M
+   To derive a zero-coupon bond pricing formula, we recall that P (t, T ) can be written in
+terms of instantaneous forwards as in (2).Using this and (20) we thus get:
+                (
+                 P (0, t, T ) exp −G(t, T )| X(t) − 21 G(t, T )| Y (t)G(t, T )
+                                 
+                                                                               if t < T
+    P (t, T ) =        RT                                                               (22)
+                 exp{ t r(u) du}                                               if t ≥ T
+
+where P (s, t, T ) denotes the forward discount factor at time s between t and T , that is
+P (s, t, T ) = PP(s,T
+                 (s,t)
+                      )
+                        . When t < T , formula (22) could be simplified by noting that the k-th
+component of vector G(t, T ) is zero if k < η(t) or k > η(T ), so:
+
+                   G(t, T ) = (0, . . . , 0, Gη(t) (t, T ), . . . , Gη(T ) (t, T ), 0, . . . , 0)
+
+                                                         8
+     The bond price dynamics are Markovian in the factors Xk (t) and Yk,h (t), k, h =
+1, . . . , M , to which we must add the forward rates Rj (t), j = 1, . . . , M , and any other
+factor defining the volatilities σjR (t). The total number of factors depends on the numbers
+of forwards Rj being modeled, whereas the FMM-dimensionality parameter N affects the
+numbers of factors defining the evolution of each process Xk .
+     To simulate all possible discount factors P (t, T ) with 0 < t < T ≤ TM , we, therefore,
+need to simulate:
+     • Each Yk,h (t), h, k = 1, . . . , M , up to time Th
+     • Each Xk (t), k = 1, . . . , M , up to time Tk
+The number of state variables to simulate thus grows quadratically with the number M
+of forward rates Rj , which makes formula (22) extremely unappealing and difficult to use
+in practice, despite its concise and clean representation. This is because the bond price
+functional P, where P (t, T ) = P(t, T ; X(t), Y (t)) for t < T , depends on forward rates Rj
+only indirectly through processes X(t) and Y (t). By using (22), we end up repeating some
+of the calculations that are intrinsic to the simulation of each rate Rj .
+     A more efficient algorithm for the generation of bond prices will be outlined in the
+next section where we will show that the costly dependence of each Xk (t) on off-diagonal
+elements Yh,k (t), h 6= k, can be eliminated by noticing that, for k = η(t), the differ-
+ence Xk (t) − Xk (Tk−1 ) only depends on Yk,k (t). By leveraging the simulated values of
+forward rates at valuation time t as well as at the beginning of their application period,
+Rη(t) (Tη(t)−1 ), we can extend the price functional P so that the number of state variables
+needed for its valuation only grows linearly.4
+
+
+5       Completing the curve using the FMM-fitted HJM
+Many interest-rate contracts require the simulation of rates that do not lie on the given
+grid of times T0 , . . . , TM . Therefore, in addition to rates Rj (Tj−1 ) or Rj (Tj ), for each j, we
+may want to generate fixings of general forward-looking as well as backward-looking rates,
+using respectively the following formulas:
+                                                                    
+                                                  1         1
+                                  F (t, T ) =                     −1
+                                              τ (t, T ) P (t, T )
+                                                  1 h R T r(u) du     i
+                                  R(t, T ) =             et        −1                             (23)
+                                              τ (t, T )
+                                                                  
+                                                  1       B(T )
+                                            =                   −1
+                                              τ (t, T ) B(t)
+
+for general t < T , and where τ (t, T ) denotes the year fraction between t and T .
+    4
+    To be precise, the extended price functional will also depend on Yη(t),η(t) (Tη(t)−1 ). Therefore, by giving
+up on the Markovianity of bond price dynamics, and making formulas mildly path-dependent, we can be
+much more efficient in the simulation of general discount factors.
+
+
+                                                       9
+   Rates F (t, T ) can be calculated using the bond price formula (22), whereas rates R(t, T )
+can be obtained by integrating over paths of r(t) generated using (20). These calculations,
+however, are typically too expensive to be implemented in a production code. We thus
+propose a much more efficient algorithm that leverages the value of simulated rates Rj (t).
+   Explicit dynamics for same-tenor off-grid rates are derived in Appendix C.
+
+5.1    An efficient representation of bond prices and bank account
+For every pair (t, T ) with T > Tη(t) , following Schlögl (2002), we can write:
+
+                                               η(T )−1
+                                                 Y             1
+                   P (t, T ) = P (t, Tη(t) )                            P (t, Tη(T )−1 , T )   (24)
+                                                          1 + τj Rj (t)
+                                               j=η(t)+1
+
+
+with the convention that the product is equal to one when the set of indexes j is empty.
+Similarly to the LMM, the FMM can generate values of the central term in the RHS of
+the equation above, which depends on simulated forward rates, but can not generate, in
+general, the discount factors P (t, Tη(t) ) and P (t, Tη(T )−1 , T ). Likewise, both the LMM and
+FMM can not generate values of P (t, T ) when t < T < Tη(t) .
+   As per the bank account B(t), we notice that we can write:
+                                                    η(t)
+                                                    Y
+                                B(t) = P (t, Tη(t) ) [1 + τj Rj (t)]                           (25)
+                                                           j=1
+
+
+which can be simulated by calculating the value of the discount factor P (t, Tη(t) ).
+    In the LMM literature, the calculation of P (t, T ) for t < T ≤ Tη(t) is commonly referred
+to as “front-stub interpolation”, whereas the calculation of P (t, Tη(T )−1 , T ) for T > Tη(t) is
+referred to as “back-stub interpolation”. In the following, we will derive back and front-
+stub formulas using the FMM-fitted Markovian HJM introduced before. We first show
+how to calculate P (t, Tη(T )−1 , T ), because we will use the back-stub result to derive the
+front-stub interpolation P (t, Tη(t) ), and more generally P (t, T ) with t < T < Tη(t) .
+
+
+
+
+                                                     10
+5.2     The back-stub interpolation
+Assume that t ≤ Tk−1 where we set k = η(T ). Using (22) and the definition of G(t, T ), we
+have:
+                     P (t, T )
+P (t, Tk−1 , T ) =
+                   P (t, Tk−1 )
+                                                                                                        
+                                       |        1        |                          |
+                                                                                                       
+ = P (0, Tk−1 , T ) exp − G(Tk−1 , T ) X(t) − G(t, T ) Y (t)G(t, T ) − G(t, Tk−1 ) Y (t)G(t, Tk−1 )
+                                                2
+                         
+ = P (0, Tk−1 , T ) exp − G(Tk−1 , T )| X(t)
+                                                                                                      
+       1                           |                                            |
+                                                                                                    
+   −      G(t, Tk−1 ) + G(Tk−1 , T ) Y (t) G(t, Tk−1 ) + G(Tk−1 , T ) − G(t, Tk−1 ) Y (t)G(t, Tk−1 )
+       2
+                                                                                                  
+                                       |
+                                                               1              |
+ = P (0, Tk−1 , T ) exp − G(Tk−1 , T ) X(t) + Y (t)G(t, Tk−1 ) − G(Tk−1 , T ) Y (t)G(Tk−1 , T )
+                                                                     2
+                                                                                            (26)
+where we used that G(t, Tk−1 )| Y (t)G(Tk−1 , T ) = G(Tk−1 , T )| Y (t)G(t, Tk−1 ) since Y is
+symmetrical.
+   Now notice that, since Tk−1 < T ≤ Tk , all the components of G(Tk−1 , T ) are zero with
+the exception of the k-th one, so we can write:
+                                                                                          
+                                                                   1         2
+   P (t, Tk−1 , T ) = P (0, Tk−1 , T ) exp − Zk (t)Gk (Tk−1 , T ) − Yk,k (t)Gk (Tk−1 , T )   (27)
+                                                                   2
+where the scalar stochastic process Zk (t) is defined by
+                                                   k−1
+                                                   X
+                               Zk (t) = Xk (t) +            Yk,i (t)Gi (t, Tk−1 )                      (28)
+                                                   i=η(t)
+
+    Setting T = Tk and recalling that Gk (Tk−1 , Tk ) = 1, we get:
+                                                                                      
+                                   1                                          1
+          P (t, Tk−1 , Tk ) =               = P (0, Tk−1 , Tk ) exp − Zk (t) − Yk,k (t)                (29)
+                              1 + τk Rk (t)                                   2
+which, solving for Zk (t), yields:
+                                                                               1
+                       Zk (t) = ln 1 + τk Rk (t) + ln P (0, Tk−1 , Tk ) − Yk,k (t)                      (30)
+                                                                                2
+Plugging (30) into (27), we get the following back-stub formula for the forward bond
+P (t, Tk−1 , T ) with t ≤ Tk−1 < T ≤ Tk :5
+                                                        −Gk (Tk−1 ,T )
+      P (t, Tk−1 , T ) = P (0, Tk−1 , T ) 1 + τk Rk (t)                 P (0, Tk−1 , Tk )−Gk (Tk−1 ,T )
+                                                                                                        (31)
+                                                                    
+                                 1
+                         · exp     Gk (Tk−1 , T )Gk (T, Tk )Yk,k (t)
+                                 2
+  5
+    Andersen and Piterbarg (2010) derived a similar interpolation inspired by the Hull-White one-factor
+model. We here show that their formula is in fact general in structure, and that the G and Y terms are
+model dependent.
+
+
+                                                    11
+which can be written in log form as:
+
+  ln P (t, Tk−1 , T ) − ln P (0, Tk−1 , T )
+                                                                 1
+     = Gk (Tk−1 , T ) ln P (t, Tk−1 , Tk ) − ln P (0, Tk−1 , Tk ) + Gk (Tk−1 , T )Gk (T, Tk )Yk,k (t)
+                                                                   2
+                                                                                                   (32)
+
+This representation has an interesting interpretation in terms of a time change. In fact,
+let us define the G-time forward rate RG (t, Tk−1 , T ) as:
+                                                                            
+                    P (t, Tk−1 , T ) = exp − RG (t, Tk−1 , T )Gk (Tk−1 , T )        (33)
+
+Then, equation (32) can be written as:
+                                                                                  1
+ RG (t, Tk−1 , T ) − RG (0, Tk−1 , T ) = RG (t, Tk−1 , Tk ) − RG (0, Tk−1 , Tk ) − Gk (T, Tk )Yk,k (t)
+                                                                                  2
+                                                                                                   (34)
+
+meaning that the difference between time-t and time-0 values of the G-time forward rate
+RG (t, Tk−1 , T ) is linear in G-time Gk (Tk−1 , T ). Analogously, as per equation (32), the log-
+difference between time-t and time-0 zero-bond prices over the k-th accrual period is given
+by a linear interpolation in terms of G-time plus a convexity adjustment that vanishes at
+both endpoints of the corresponding application interval.
+    Inspecting (31) or (32), we see that to simulate P (t, Tk−1 , T ) for all possible choices of
+t and T (and hence k), besides forward rates Rk (t), we need to also simulate each process
+Yk,k (t) up to time Tk−1 . So, the back-stub interpolation only comes at the cost of simulating
+the diagonal elements of Y (t) up to their fixing times:
+                                    Z t                    Z t              2
+                                              |                    σk (s)
+                         Yk,k (t) =     ςk (s) ςk (s) ds =                      ds          (35)
+                                     0                      0   Rk (s) + τ1k
+
+for t ≤ Tk−1 , and where we used (18) and (10). We also notice that, because of (18), we
+can write that Gk (t, T ) = γk (t) − γk (T ). In particular:
+
+                                    Gk (Tk−1 , T ) = 1 − γk (T )
+                                                                                                  (36)
+                                      Gk (T, Tk ) = γk (T )
+
+which can be used to make formulas (31) and (32) more explicit.
+
+5.3    The front-stub interpolation
+We now consider the front-stub case where Tk−1 < t < T ≤ Tk with k = η(t) = η(T ).
+Following Appendix B, and formulas (48) and (49) in particular, we can write:
+                                                                                
+                                                                1 2
+            P (t, T ) = P (Tk−1 , t, T ) exp −Gk (t, T )xk (t) − Gk (t, T )yk (t)  (37)
+                                                                2
+
+                                                 12
+where, for Tk−1 ≤ t ≤ Tk ,
+                                                                σk (t)
+                            dxk (t) = gk (t)yk (t) dt +                   dWk (t)                     (38)
+                                                             Rk (t) + τ1k
+with xk (Tk−1 ) = 0, and
+                                                                       2
+                                                         σk (t)
+                                dyk (t) = dYk,k (t) =                        dt                       (39)
+                                                      Rk (t) + τ1k
+with yk (Tk−1 ) = 0.6
+    Therefore, the simulation of P (t, T ), when Tk−1 < t < T ≤ Tk , can be achieved (exactly,
+in an HJM sense) at a little extra computational cost, that is the simulation of processes
+xk (t) and yk (t) inside their corresponding application period. The latter can be calculated
+by leveraging the simulated paths of Yk,k (t) since yk (t) = Yk,k (t) − Yk,k (Tk−1 ), whereas the
+former can be simulated using (38).
+    It is relatively easy to show that xk (t) only depends on the realized paths of σk (t) and
+Rk (t). In fact, using (4), (48) and r(s) = f (s, s), we have:
+                                      (Z                                                            )
+                                         t
+                        1                                                         1 2
+  1 + τk Rk (t) =                 exp        gk (s)xk (s) ds + Gk (t, Tk )xk (t) + Gk (t, Tk )yk (t)
+                   P (Tk−1 , Tk )       Tk−1                                      2
+                                      (Z                                            )
+                                         t
+                        1                                         1 2
+                =                 exp        Gk (s, Tk ) dxk (s) + Gk (t, T )yk (t)
+                   P (Tk−1 , Tk )       Tk−1                      2
+which leads to
+                          Z t                                                   
+                                  1                            1 2
+                xk (t) =                  d ln(1 + τk Rk (s)) − Gk (s, Tk )yk (s)                     (40)
+                         Tk−1 Gk (s, Tk )                      2
+This dynamics is a viable alternative to (38) to generate values of the local process xk (t).
+When using an Euler scheme, in fact, (40) allows us to calculate xk (t) just using the known
+values and increments of Rk (t) and yk (t).
+    The forward discount factor P (Tk−1 , t, T ) in (37) can be calculated by taking the ratio
+of P (Tk−1 , T ) and P (Tk−1 , t), which are in turn calculated using the back-stub formula (31)
+with t = Tk−1 . After some minor simplification, we finally get:
+                                                                                     
+                                          −Gk (t,T )
+                                                                      −Gk (t,T )
+ P (t, T ) = P (0, t, T )P (0, Tk−1 , Tk )           1 + τk Rk (Tk−1 )            exp − Gk (t, T )xk (t)
+                                                                                                         
+                1 2                   1
+             − Gk (t, T )yk (t) + Yk,k (Tk−1 ) [Gk (T, Tk )Gk (Tk−1 , T ) − Gk (t, Tk )Gk (Tk−1 , t)]
+                2                     2
+                                                                                                       (41)
+    6
+      The front-stub methodology proposed by Werpachowski (2010) relies on the introduction of a fictitious
+rate that evolves stochastically after a forward-looking (LIBOR) rate Lk (t) is fixed at the beginning of
+its application period Tk−1 . In the FMM, this can be avoided thanks to our definition of forward term
+rate Rk (t), which is equal to the fixing of the forward-looking term rate at Tk−1 and continues to evolve
+stochastically until Tk .
+
+
+                                                    13
+In particular, for T = Tk :
+                                                                         −Gk (t,Tk )
+ P (t, Tk ) = P (0, t, Tk )P (0, Tk−1 , Tk )−Gk (t,Tk ) 1 + τk Rk (Tk−1 )
+                                                                                                
+                                             1 2                    1
+              · exp −Gk (t, Tk )xk (t) − Gk (t, Tk )yk (t) − Gk (t, Tk )Gk (Tk−1 , t)Yk,k (Tk−1 )
+                                             2                      2
+                                                                                                (42)
+
+5.4     Summary of the simulation steps
+We assume that the FMM is simulated on a grid of times 0 = t0 , t1 , . . . , tm = TM , which
+contains the FMM dates T0 , . . . , TM as well as all the fixing and maturity dates that are
+relevant for given valuation purposes. The steps to take to simulate general rates are as
+follows. Starting from time-0 values, for i = 1, . . . , m:
+    • Simulate rates Rk (ti ) and volatilities σk (ti ) for each k = η(ti ), . . . , M .
+    • Calculate Yk,k (ti ) for each k = η(ti ), . . . , M , using (35).
+    • Calculate yk (ti ) = Yk,k (ti ) − Yk,k (Tk−1 ) for each k = η(ti ), . . . , M .
+    • Simulate xk (ti ) for each k = η(ti ), . . . , M , using (38) or (40) leveraging already-
+      calculated values and increments of yk (t) and Rk (t).
+    • Calculate P (ti , T ) for all relevant times ti < T ≤ Tη(ti ) using the front-stub form
+      ula (41).
+    • Calculate P (ti , T ) for all relevant times T > Tη(ti ) using (24), that is:
+
+                                                        η(T )−1
+                                                          Y              1
+                     P (ti , T ) = P (ti , Tη(ti ) )                                P (ti , Tη(T )−1 , T )
+                                                                    1 + τj Rj (ti )
+                                                       j=η(ti )+1
+
+
+     where P (ti , Tη(ti ) ) is calculated using the front-stub formula (42), and P (ti , Tη(T )−1 , T )
+     using the back-stub formula (31).7
+   • Calculate the bank account B(ti ) using (25), that is:
+                                                                    η(ti )
+                                                                     Y
+                                     B(ti ) = P (ti , Tη(ti ) )            [1 + τj Rj (ti )]
+                                                                     j=1
+
+
+       where P (ti , Tη(ti ) ) is calculated using the front-stub formula (42).
+    As a final remark, we notice that each Yk,k (t) is simulated from time zero to its last
+fixing time Tk , whereas each xk (t) evolves only in the corresponding application period
+[Tk−1 , Tk ]. For each k, the simulation of both Yk,k (t) and xk (t), if an Euler scheme is used,
+does not require the generation of additional stochastic variables but only the valuation of
+sums (integrals) based on already-calculated quantities.
+   7
+    The formula for the bond price P (ti , T ) can be slightly simplified by expressing (42) in terms of
+processes x̄k (t) = Xk (t) − Xk (Tk−1 ) and Yk,k (t) instead of xk (t) and Yk,k (t).
+
+
+                                                           14
+6     Numerical results
+We tested the performance of both our back- and front-stub interpolation formulas using
+the following:
+    • Proof-of-concept (round-trip) test
+      We first run an analytically-tractable one-factor separable HJM model, equivalent to
+      a one-factor Hull-White (1990) model, to generate forward term-rate paths and use
+      our back- and front-stub formulas to derive the corresponding values for other off-grid
+      rates. We then compare the results to those given by the original HJM model.
+    • Implementation robustness test
+      When running the proof-of-concept test, we make some simplifying assumptions,
+      which are appropriate for a practical implementation of the FMM, to see whether
+      the fit errors remain small.
+    • Production implementation test
+      In one of our organizations, we converted the existing LMM implementation into an
+      FMM, including back- and front-stub formulas, and compared the FMM performance
+      to that of the LMM it replaced.
+   In the remainder of this section, we discuss some of the results obtained when running
+the tests described above.
+
+6.1    Proof-of-concept test
+We used a one-factor Hull-White (HW-1F) model, where the instantaneous rate r(t) evolves
+according to the following Q dynamics:
+
+                              dr(t) = a[θ(t) − r(t)] dt + σ dW (t)
+
+where a and σ are positive constants, and θ is a deterministic function. As is well known,
+HW-1F is equivalent to a one-factor separable HJM model with the instantaneous forward-
+rate volatility given by
+                                   σ(t, T ) = σ e−a(T −t)
+It is then easy to show that we can express this volatility σ(t, T ) in the form (16), that is:
+                                                   M
+                                                   X
+                                      σ(t, T ) =         ςk (t) gk (T )
+                                                   k=1
+
+where we set
+                                   e−a(Tk−1 −t) − e−a(Tk −t)
+                         ςk (t) = σ
+                                               a
+                                              a
+                        gk (T ) = −a(T −T )                  1{T ∈[Tk−1 ,Tk ]}
+                                 e    k−1      − e−a(Tk −T )
+
+                                                   15
+so the constraint Gk (Tk−1 , Tk ) = 1 is satisfied.
+    For a given k = 1, . . . , M , we simulated values of the forward rate Rk (t) and used back-
+stub and front-stub formulas to compute values P (t, T ) and B(t) for Tk−1 ≤ t < T ≤ Tk .
+We set the volatility parameter σ to a typical value of 0.01, and tested our formulas for
+Tk−1 ranging from 1 year to 30 years, and for the mean reversion parameter a ranging from
+0.0 to 0.5. We used six-month term rate periods and weekly time steps. In all our tests,
+the error for the back-stub formulas, when compared to the exact values given by HW-1F,
+was zero because the back-stub formula (31) depends on Rk (t), which was calculated using
+HW-1F, as well as on other quantities that can be expressed in exact closed form. The
+front-stub formulas produced slightly bigger (but still negligible) errors around 0.01-0.02
+basis points, because of the numerical integration involved.
+
+6.2      Implementation robustness test
+In a practical implementation of the FMM, especially when converting an existing LMM
+implementation, we are likely to use a constant function gk (T ) = 1/(Tk − Tk−1 ), T ∈
+[Tk−1 , Tk ], which corresponds to a linear volatility decay function for the term rate Rk ,
+and have the volatility ςk (t) flat-extrapolated in the application period: ςk (t) = ςk (Tk−1 ),
+t ∈ [Tk−1 , Tk ]. These formulas for ςk (t) and gk (T ) are exact in the case of zero mean
+reversion, a = 0. For a > 0, there is an approximation error that grows with the value of
+the mean reversion parameter a.
+    We tested the effects of these practical simplifications using the HW-1F described in
+the previous section. Our tests showed that the back- and front-stub errors increase for
+increasing values of a, as expected, with most of the error coming from the approximation
+of function gk (T ) that enters the back- and front-stub formulas in the form of the function
+Gk (t, T ). We also saw that the largest part of the error in the front-stub interpolation
+comes from the back-stub term P (Tk−1 , t, T ) in the front-stub formula (37). We can easily
+verify this by looking at the instantaneous forward rates. By differentiating the back-stub
+formula (32) with respect to T , we get for t ≤ Tk−1 < T < Tk :
+f (t, T ) = f (0, T )
+                                                                                                       
+                                                                  1                            
+           + gk (T ) ln P (0, Tk−1 , Tk ) − ln P (t, Tk−1 , Tk ) + Gk (Tk−1 , T ) − Gk (T, Tk ) Yk,k (t)
+                                                                  2
+                                                                                                  (43)
+Doing the same to the front-stub formula (37), see also formula (48) in Appendix B, yields
+for Tk−1 < t < T < Tk :
+                                                                               
+                   f (t, T ) = f (Tk−1 , T ) + gk (T ) xk (t) + Gk (t, T )yk (t)      (44)
+The square-bracket term in the back-stub formula (43) gives the sensitivity to function
+gk (T ). In the front-stub formula (44), the first term f (Tk−1 , T ) is given by the back-stub
+formula (43) with t = Tk−1 . The additional sensitivity to gk (T ) in (44) comes from the
+second term where the value in the brackets is relatively small because terms xk (t) and
+yk (t) are local and both zero at Tk−1 .
+
+                                                  16
+6.3    Production implementation test
+We have converted the existing LMM implementation into an FMM, including back- and
+front-stub interpolations, by flat-extrapolating volatility parameters into the application
+periods and by using linear volatility decay functions, as described in the previous section.
+The model was calibrated to LIBOR-based caps and swaptions using the same analytical
+formulas as the LMM ones. The back- and front-stub approaches used within the existing
+LMM implementation were based on the assumption, originally proposed by Brace et al.
+(1997), that the volatility of the front-stub bond P (t, Tη(t) ) is zero, which implies a deter-
+ministic forward-rate evolution within each application period: P (t, T ) = P (Tη(t)−1 , t, T )
+for t < T ≤ Tη(t) . Under this assumption: 1) the LMM becomes a specific case of the FMM
+with γk (t) = 1{t≤Tk−1 } ; 2) the discrete (spot-LIBOR) and continuous (money-market) risk-
+neutral measures coincide, and 3) the realized backward-looking term rates are the same
+as the corresponding forward-looking ones.
+    We tested the consistency of the LMM and FMM implementations by comparing the
+generated rate paths and the values of instrument prices and sensitivities. As expected,
+the FMM and LMM are very close in terms of the rate path distribution they generate
+and the instrument prices and sensitivities they produce. For instance, the following are
+the observed differences in the Option Adjusted Spread (OAS), Option Adjusted Duration
+(OAD) and Weighted Average Life (WAL), for a very liquid 30-year fixed-rate UMBS and
+most liquid coupons:
+                Coupon     OAS (basis points)      OAD (years) WAL (years)
+                 2.50           0.0500               0.0013      0.0036
+                 3.00           0.0900               0.0011      0.0037
+                 3.50           0.1100               0.0013      0.0035
+                 4.00           0.1300               0.0017      0.0034
+                 4.50           0.1200               0.0019      0.0027
+
+7     Conclusions
+We showed that the generalized FMM introduced by Lyashenko and Mercurio (2019a)
+can be efficiently extended to make it a complete term-structure model describing the
+evolution of all possible bond prices P (t, T ) as well as of the continuously-accruing money-
+market account B(t), which are needed to compute both the realized forward-looking and
+backward-looking term rates. This is accomplished by matching the FMM dynamics using
+a Markovian HJM with separable volatility parameters, which is used to derive back-stub
+and front-stub formulas to fill the gaps left by the FMM.
+    We also showed that, unlike existing methods used to complete the LMM, the derived
+formulas are not only theoretically sound and arbitrage-free but also numerically efficient.
+Numerical efficiency is achieved by relaxing the expensive dependence on the typically
+large number of Markovian state variables, and by allowing for the knowledge, on each
+simulation time, of quantities known at the beginning of the corresponding FMM period.
+
+
+                                              17
+   We finally stress that our FMM extension results in a model that is effectively a hybrid
+between an LMM and a Markovian HJM, and combines the flexibility of the former with
+the fine resolution of the latter, while preserving computational efficiency. In fact, this ap-
+proach can be easily used to extend current LMM implementations at a little development
+cost.
+
+
+References
+ [1] Andersen, L., and Piterbarg, V. (2010) Interest Rate Modeling. Atlantic Financial
+     Press.
+ [2] Beveridge, C., and Joshi, M. (2009). Interpolation Schemes in the
+     Displaced-Diffusion   LIBOR     Market    Model     and   the Efficient Pric-
+     ing and Greeks for Callable Range Accruals. Available online at:
+     https://papers.ssrn.com/sol3/papers.cfm?abstract id=1461285.
+ [3] Brace, A., Gatarek D., and Musiela, M. (1997) The Market Model of Interest Rate
+     Dynamics. Mathematical Finance 7, 127-155.
+ [4] Cheyette, O. (2001) Markov Representation of the Heath-Jarrow-Morton Model.
+     Available online at: https://papers.ssrn.com/sol3/papers.cfm?abstract id=6073.
+ [5] Fries, C. (2019) Critical Review of Interest Rates Models and Time-Homogeneous
+     Discrete Tenor Modelling. Talk at the 15th WBS Quantitative Finance Conference,
+     Rome, Italy.
+ [6] Hull, J., and White, A. (1990) Pricing Interest-Rate-Derivative Securities. Review of
+     Financial Studies 3(4), 573-592.
+ [7] Hull, J., and White, A. (1994) Numerical Procedures for Implementing Term Structure
+     Models II: Two-Factor Models. The Journal of Derivatives 2, 37-47.
+ [8] Lyashenko, A., and Mercurio, F. (2019a) Libor Replacement: A Modeling Framework
+     for In-arrears Term Rates. Risk July, 72-77.
+ [9] Lyashenko, A., and Mercurio, F. (2019b) Looking Forward to Backward-Looking
+     Rates: A Modeling Framework for Term Rates Replacing LIBOR. Available online
+     at: https://papers.ssrn.com/sol3/papers.cfm?abstract id=3330240.
+[10] Piterbarg, V. (2004). Computing Deltas of Callable LIBOR Exotics in Forward LIBOR
+     Models. Journal of Computational Finance 7, 107-144.
+[11] Schlögl, E. (2002). Arbitrage-Free Interpolation in Models of Market Observable In-
+     terest Rates. In K. Sandmann and P. Schönbucher, editors, Advances in Finance and
+     Stochastics: Essays in Honour of Dieter Sondermann. Springer Verlag, Heidelberg.
+[12] Werpachowski, R. (2010). Arbitrage-Free Rate Interpolation Scheme for Libor Market
+     Model with Smooth Volatility Term Structure. Available online at:
+     https://papers.ssrn.com/sol3/papers.cfm?abstract id=1729828.
+
+                                              18
+Appendix A: The integrated instantaneous forward-
+rate dynamics
+Under the separable volatility assumption (19), the integrated Q-dynamics of f (t, T ) can
+be obtained as follows:
+                        Z t           Z T                 Z t
+                                    |
+f (t, T ) = f (0, T ) +     σ(u, T )      σ(u, s) ds du +     σ(s, T )| dW (s)
+                          0                       u                                         0
+                            M
+                         Z tX                                      M
+                                                                Z TX                                              M
+                                                                                                               Z tX
+                                                            |
+        = f (0, T ) +                 gk (T ) ςk (u)                           ςk (u) gk (s) ds du +                         gk (T ) ςk (s)| dW (s)
+                         0 k=1                                      u    k=1                                        0 k=1
+                         M
+                         X                   Z t                           Z T                            M
+                                                                                                          X                  Z t
+                                                                |
+        = f (0, T ) +              gk (T )            ςk (u) ςh (u)                gh (s) ds du +                  gk (T )         ςk (s)| dW (s)
+                         k,h=1                0                                u                          k=1                 0
+
+                         M
+                         X                   Z t                                   Z T                       Z t            Z u                       
+                                                                    |                                                                    |
+        = f (0, T ) +              gk (T )             ςk (u) ςh (u) du                         gh (s) ds +         gh (u)          ςk (s) ςh (s) ds du
+                         k,h=1                    0                                     t                      0              0
+
+              M
+              X               Z t
+          +         gk (T )         ςk (s)| dW (s)
+              k=1              0
+                         M
+                         X                                  M
+                                                            X                      Z T
+        = f (0, T ) +          gk (T )Xk (t) +                          gk (T )             gh (s) ds Yk,h (t)
+                         k=1                              k,h=1                     t
+
+
+where we set, for k, h = 1, . . . , M :
+                                                      M
+                                                      X
+                                   dXk (t) =                gh (t)Yk,h (t) dt + ςk (t)| dW (t)
+                                                      h=1
+                               dYk,h (t) = ςk (t)| ςh (t) dt
+
+with Xk (0) = Yk,h (0) = 0 for all k, h = 1, . . . , M . In particular, we have that:
+                                                                            M
+                                                                            X
+                                             r(t) = f (0, t) +                      gk (t)Xk (t)                                              (45)
+                                                                            k=1
+
+  The above equation can be expressed in a more compact form using the vector and
+matrix notation introduced in Section 4.2. We can then write:
+                         f (t, T ) = f (0, T ) + g(T )| X(t) + g(T )| Y (t)G(t, T )
+                             r(t) = f (0, t) + g(t)| X(t)
+
+where
+                                        dX(t) = Y (t)g(t) dt + ς(t) dW (t)
+                                        dY (t) = ς(t) ς(t)| dt
+
+                                                                          19
+Appendix B: The local property
+Let us consider three times 0 ≤ S ≤ t ≤ T . We know that the instantaneous forward rate
+f (t, T ) can be represented as:
+                     f (t, T ) = f (0, T ) + g(T )| X(t) + g(T )| Y (t)G(t, T )
+In particular, when t = S,
+                   f (S, T ) = f (0, T ) + g(T )| X(S) + g(T )| Y (S)G(S, T )
+Subtracting side by side, we get:
+    f (t, T ) = f (S, T ) + g(T )| [X(t) − X(S)] + g(T )| [Y (t)G(t, T ) − Y (S)G(S, T )]   (46)
+In particular, setting T = t, we obtain the following short-rate representation:
+                  r(t) = f (S, t) + g(t)| [X(t) − X(S)] − g(t)| Y (S)G(S, t)
+                       = f (S, t) + g(t)| [X(t) − X(S) − Y (S)G(S, t)]
+Inspired by this, equation (46) can be rewritten as:
+    f (t, T ) = f (S, T ) + g(T )| [X(t) − X(S)] + g(T )| [Y (t)G(t, T ) − Y (S)G(S, T )]
+              = f (S, T ) + g(T )| [X(t) − X(S)] + g(T )| [Y (t)G(t, T ) − Y (S)G(t, T )]
+                + g(T )| [Y (S)G(t, T ) − Y (S)G(S, T )]
+                                                                                            (47)
+              = f (S, T ) + g(T )| [X(t) − X(S) − Y (S)G(S, t)]
+                + g(T )| [Y (t) − Y (S)]G(t, T )
+            = f (S, T ) + g(T )| X S (t) + g(T )| Y S (t)G(t, T )
+where we set:
+                               X S (t) = X(t) − X(S) − Y (S)G(S, t)
+                               Y S (t) = Y (t) − Y (S)
+for t ≥ S, so
+                               dX S (t) = Y S (t)g(t) dt + ς(t) dW (t)
+                               dY S (t) = ς(t) ς(t)| dt
+with initial conditions X S (S) = 0 and Y S (S) = 0. In particular, X 0 (t) = X(t) and
+Y 0 (t) = Y (t).
+     The price of the zero-coupon bond P (t, T ) = P S (t, T ), when S ≤ t ≤ T , is then given
+by:
+                          RT
+          P S (t, T ) = e− t f (t,u) du
+                             Z T                                                    
+                                                       | S          | S
+                      = exp −          [f (S, u) + g(u) X (t) + g(u) Y (t)G(t, u)] du
+                                    t
+                                                                                    
+                                                     | S       1      | S
+                      = P (S, t, T ) exp −G(t, T ) X (t) − G(t, T ) Y (t)G(t, T )
+                                                               2
+
+                                                 20
+   The issue with the above representations is that both X S (t) and Y S (t) are S dependent,
+so new processes X S (t) and Y S (t) have to be considered (and simulated) when changing
+the time S. However, a much simpler and useful formulation can be derived by assuming
+that η(t) = η(T ) = k, for some k, and setting S = Tk−1 . In this case, the above formulas
+simplify as follows:
+
+                f (t, T ) = f (Tk−1 , T ) + gk (T )xk (t) + gk (T )yk (t)Gk (t, T )
+                                                                                            (48)
+                                                                                    
+                                                                         1 2
+                P (t, T ) = P (Tk−1 , t, T ) exp −Gk (t, T )xk (t) − Gk (t, T )yk (t)
+                                                                         2
+
+where we set:
+                            T
+                 xk (t) = Xk k−1 (t) = Xk (t) − Xk (Tk−1 ) − Gk (Tk−1 , t)Yk,k (Tk−1 )
+                            T
+                 yk (t) = Yk,kk−1 (t) = Yk,k (t) − Yk,k (Tk−1 )
+
+for Tk−1 ≤ t ≤ Tk , so
+
+                                dxk (t) = gk (t)yk (t) dt + ςk (t)| dW (t)
+                                dyk (t) = ςk (t)| ςk (t) dt
+
+and xk (Tk−1 ) = yk (Tk−1 ) = 0.
+    For each k = 1, . . . , M , processes xk and yk are local in that they are defined in their
+corresponding intervals [Tk−1 , Tk ]. The advantage of this local formulation is that processes
+xk (t) and yk (t) are scalar, so easier to simulate. Moreover, dynamics are effectively one-
+factor because, using (18) and (35), we have:
+
+                                                           σk (t)
+                           dxk (t) = gk (t)yk (t) dt +                dWk (t)
+                                                       Rk (t) + τ1k
+                                                                 2                        (49)
+                                                       σk (t)
+                            dyk (t) = dYk,k (t) =                    dt
+                                                    Rk (t) + τ1k
+
+We notice that, as already derived by Lyashenko and Mercurio (2019b), dynamics (49) can
+be directly obtained by matching a one-factor Cheyette model to the Q-dynamics of Rk (t)
+inside its application interval [Tk−1 , Tk ].
+
+
+Appendix C: forward-rate dynamics for general same
+tenor rates
+We here derive the dynamics of a general τ -tenor forward rate under the assumption that
+the initial time structure T0 , . . . , TM defines spanning rates with same tenor τ . Even though
+off-grid rates can be efficiently generated by using the interpolation method summarized in
+
+
+                                                   21
+Section 5.4, having explicit dynamics for off-grid rates can be beneficial when pricing path-
+dependent contracts such as range accruals, or when using deal-aligned dates as opposed
+to the market-aligned dates used upon calibration.
+    A general forward rate F (t; t1 , t2 ) is defined by
+                                                                         
+                                                   1         P (t, t1 )
+                             F (t; t1 , t2 ) =                          −1               (50)
+                                               τ (t1 , t2 ) P (t, t2 )
+
+where t ≤ t1 < t2 , t2 − t1 = τ , and where we recall that τ (t1 , t2 ) denotes the year fraction
+between t1 and t2 .
+   Setting k = η(t1 ), so η(t2 ) = k + 1, application of (22) leads to the following:
+                                                              
+                                                      1
+  dF (t; t1 , t2 ) = · · · dt + F (t; t1 , t2 ) +                G(t1 , t2 )| ς(t) dW (t)
+                                                  τ (t1 , t2 )
+                                                              
+                                                      1
+                   = · · · dt + F (t; t1 , t2 ) +
+                                                  τ (t1 , t2 )
+                       "                                                                                   #
+                                        σk (t)                                        σk+1 (t)
+                     · Gk (t1 , Tk )              dWk (t) + Gk+1 (Tk , t2 )                     1 dWk+1 (t)
+                                     Rk (t) + τ1k                                  Rk+1 (t) + τk+1
+                                                              
+                                                      1
+                   = · · · dt + F (t; t1 , t2 ) +                σ1,2 (t) dW1,2 (t)
+                                                  τ (t1 , t2 )
+                                                                                                           (51)
+
+where we set
+                                                                                      2
+                2                               σk2 (t)                            σk+1  (t)
+               σ1,2 (t) = G2k (t1 , Tk ) h                      2
+                                                          i2 + Gk+1 (Tk , t2 ) h                i2
+                                             Rk (t) + τ1k                                    1
+                                                                                Rk+1 (t) + τk+1
+                                                                                                         (52)
+                                                                    σk (t)      σk+1 (t)
+                          + 2ρk,k+1 Gk (t1 , Tk )Gk+1 (Tk , t2 )           1              1
+                                                                 Rk (t) + τk Rk+1 (t) + τk+1
+
+and the Brownian motion W1,2 (t) is defined accordingly.
+    Equations (51) and (52) define an arbitrage-free interpolation scheme for the volatility
+of off-grid rates with the same tenor as the given forwards. When t1 approaches Tk−1 , then
+σ1,2 (t) approaches σk (t)/[Rk (t) + 1/τk ], whereas when t1 approaches Tk , σ1,2 (t) approaches
+σk+1 (t)/[Rk+1 (t) + 1/τk+1 ].
+
+
+
+
+                                                          22
+

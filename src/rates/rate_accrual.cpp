@@ -1,5 +1,6 @@
 #include "rates/rate_accrual.hpp"
 
+#include <cmath>
 #include <stdexcept>
 #include <utility>
 
@@ -11,8 +12,8 @@ double SimpleForwardRate::forward_rate(const YieldCurve& curve, const QuantLib::
     if (end <= start) {
         throw std::invalid_argument("SimpleForwardRate: end must be after start");
     }
-    if (year_fraction <= 0.0) {
-        throw std::invalid_argument("SimpleForwardRate: year_fraction must be positive");
+    if (year_fraction <= 0.0 || !std::isfinite(year_fraction)) {
+        throw std::invalid_argument("SimpleForwardRate: year_fraction must be positive and finite");
     }
     return (curve.discount(start) / curve.discount(end) - 1.0) / year_fraction;
 }
@@ -35,8 +36,9 @@ double CompoundedOvernightRate::forward_rate(const YieldCurve& curve, const Quan
     if (end <= start) {
         throw std::invalid_argument("CompoundedOvernightRate: end must be after start");
     }
-    if (year_fraction <= 0.0) {
-        throw std::invalid_argument("CompoundedOvernightRate: year_fraction must be positive");
+    if (year_fraction <= 0.0 || !std::isfinite(year_fraction)) {
+        throw std::invalid_argument(
+            "CompoundedOvernightRate: year_fraction must be positive and finite");
     }
 
     double compound = 1.0;

@@ -14,8 +14,10 @@ FlatCurve::FlatCurve(QuantLib::Date reference, double zero_rate, QuantLib::DayCo
     if (day_counter_.empty()) {
         throw std::invalid_argument("FlatCurve: day counter is empty");
     }
+    if (!std::isfinite(zero_rate)) {
+        throw std::invalid_argument("FlatCurve: zero rate must be finite");
+    }
 }
-
 double FlatCurve::discount(const QuantLib::Date& d) const {
     // P(t,T) = exp(-r * tau(t,T)).  Math note §1 (P_D), flat-curve convention
     // from impl note §1. tau(t,t) = 0 gives discount(reference) == 1.

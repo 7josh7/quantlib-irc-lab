@@ -1,282 +1,260 @@
 # Roadmap
 
-Two parts: the **commitment** (Phase 0–4, ~4 months, ~10–15 hr/week) and
-the **roadmap-only** stretch (Phase 5–10, not promised, re-evaluated at
-Month 4). Within the committed range, Phase 4a (xCcy / foreign collateral)
-and Phase 4.5 (xVA) are optional — they do not gate the v1.0 MVP.
+The execution plan has three layers:
 
-Source citations per phase use the IDs from [sources.md](sources.md). The
-four-part series (I–IV) is primary for Phases 0–7; IRC is primary for
-Phases 8–10.
+1. **MVP — Phases 0–3:** environment, mini pricer, SOFR curve + bump risk,
+   then the portfolio risk report. The four "weeks" below describe four
+   focused stages, not a calendar promise.
+2. **Optional post-MVP work — Phase 4 / 4.5:** foreign-collateral curves and
+   a small xVA demonstration. Neither gates `v1.0-mvp`.
+3. **Extensions — Phases 5–10:** re-evaluated after the MVP and again at the
+   Month-4 decision gate. These are roadmap, not commitments.
 
-**Code architecture:** the math sources say *what* to compute; **CPP**
-(Joshi, *C++ Design Patterns and Derivatives Pricing*) says *how* to
-structure the C++. It's cross-cutting, not tied to one phase — port the
-patterns, modernize the pre-C++11 idioms. Pointers are noted inline below;
-full map in [sources.md](sources.md#where-cpp-applies-code-architecture-cross-cutting).
+Source citations use the IDs from [sources.md](sources.md). The local working
+copies live under `docs/ref/` and are intentionally untracked. The four-part
+series (I–IV) is primary for Phases 0–7; IRC is primary for Phases 8–10.
 
-**Testing expectation (stated up front so it isn't a Month-4 scramble):**
-every phase ships with its own validation tests — they are never deferred.
-The target is **>70% line coverage on `src/`, tracked continuously from
-Phase 2 onward**, not measured for the first time at Phase 8. Phase 8's job
-is to *confirm* the target has held and backfill residual gaps, not to
-establish it.
+**Code architecture:** the finance sources say *what* to compute. **CPP**
+(Joshi) provides small-library design patterns, while **IQ** (Ballabio,
+*Implementing QuantLib*) explains the architecture and utilities behind the
+QuantLib oracle. Add an abstraction when a second real use requires it—not
+merely because a later phase might need it. The full source map is in
+[sources.md](sources.md#where-the-implementation-references-apply).
 
-## Implementation patterns to port
+**Testing and coverage:** every phase ships with validation tests. Starting in
+Phase 2, add a coverage report to the automated build. "70% line coverage"
+means the tests execute at least 70% of the executable lines under `src/`; it
+does **not** mean the code is 70% correct. Coverage exposes untested paths,
+while analytic checks and QuantLib comparisons establish numerical confidence.
+The current value is unknown. The MSVC coverage preset and target are
+configured; the first recorded report is produced after the Phase 2
+implementation is present.
 
-These cross-cutting patterns are candidates for the C++ architecture:
+## Reference roles across the roadmap
 
-| Pattern | Where | Notes |
+Every work in `docs/ref/` has a defined role; inclusion does not mean every
+phase must use every source.
+
+| ID | Roadmap role |
+|---|---|
+| I | Collateralized-pricing foundation in Phase 1; xVA/CVA and regression in Phases 4.5, 5, 9, and 10. |
+| II | Primary modern source for Phases 0–4: RFR compounding, SOFR bootstrap, risk transformation, PCA, and xCcy curves. |
+| III | Phase 7 volatility source: Bachelier/local vol/SABR, ATM parameterization, and smile-risk Greeks. |
+| IV | Phase 7 RFR-volatility source: backward-looking caplets, time-decay SABR, and bottom-up aggregation. |
+| IRC | Secondary swap/curve/risk reference in Phases 0–3; primary source for CDS, Hull–White, LMM, Bermudan, and CCR in Phases 5–10. |
+| BM | LIBOR-era theory back-stop for short-rate models, LMM calibration, SABR, Bermudan methods, and credit—not modern SOFR plumbing. |
+| GLA | Numerical reference for finite differences, simulation, variance reduction, discretization, LSM regression, and risk/credit Monte Carlo. |
+| CPP | C++ design reference for strategies, solvers, trees, MC component boundaries, exception safety, and levelization. |
+| IQ | QuantLib implementation reference for instrument/engine separation, conventions, quotes, interpolation, solvers, handles, errors, and Observer behavior. |
+
+## Architecture decisions by need
+
+| Decision | When | Scope |
 |---|---|---|
-| **Jacobian model→market risk propagation** (`model_jacobian`, `risk_postprocess`, per-component `..._gradient_wrt_state`) | **Phase 2 — promote from stretch to deliverable** | Every component exposes analytic gradient w.r.t. its state; the model composes them into a Jacobian, then post-multiplies gradients into market-quote space (Source II §3.4). Match this. |
-| **Registry / plugin architecture** (`ModelDeserializerRegistry`, `IndexRegistry`, `ProductBuilderRegistry`) | Phase 2 onward | Self-registering pricers, curves, products. CPP Ch.10, 14 (factory). Cleaner than a big switch. |
-| **Vol model as decorator over curve** (`SABRModel(YieldCurve)` with `sub_model_`) | Phase 7 | Curve ops delegate to sub-model; SABR only adds vol. Right composition for vol-on-top-of-rates. |
-| **Serialize/deserialize protocol on every model** (versioned dict, `deserialize` via registry) | Phase 2+ | Cheap state persistence + regression fixtures. |
-| **Instrument vocabulary** (`RFRSwap`, `RFRFuture`, `OvernightIndexBasisSwap`, `CrossCurrencyBasisSwapNonMTM`, `FundingIdentifier`) | Phase 2+ naming | Use these names; matches Source II conventions. |
+| Curve abstraction + floating-rate strategy | Phase 1 | Already justified by flat/bootstrapped curves and simple/compounded accrual variants. |
+| Quote bump-and-reprice | Phase 2 | Required first-order risk implementation for the MVP. |
+| QuantLib quote/handle machinery | Phase 2 benchmark | IQ explains how mutable quotes notify dependent term structures; the hand-rolled core remains explicit and minimal. |
+| Finite-difference calibration Jacobian cross-check | Phase 2 stretch | Build only after direct quote bump-and-reprice is green; it is non-gating and provides a two-way validation of market-risk propagation. |
+| Analytic Jacobian model→market risk propagation | Post-MVP | Source II §3.4 follows curve calibration. Add it only after finite-difference bump risk provides a trusted reference. |
+| PCA risk and eigen-scenarios | Phase 3 stretch | Source II §§4.2–4.3 consume market-risk vectors and historical curve moves; they do not belong in the bootstrap. |
+| Registry / plugin architecture | Phase 8+ if needed | Defer until multiple independently constructed model or product families make a factory useful. |
+| Model serialization | When stable persistence is needed | Stable CSV input/output schemas are sufficient for the MVP. |
 
-**Do not** copy notebook-style tests without assertions,
-`import *` style, 1900-line god-modules, or the lack of any README/docstrings.
-Keep the scope auditable and maintain stronger hygiene.
-
----
-
-## Current scope — Phase 0–4 (committed)
-
-### Phase 0 — Environment (Week 1)
-
-**Sources:** II §3.3.1 (SOFR curve calibration instruments), II §3.2.2 (IRS).
-
-**Goal:** clean build from a fresh clone produces a working SOFR OIS swap
-example.
-
-Notes on the SOFR pivot: the original plan targeted a LIBOR vanilla IRS for
-the hello-world. We pivoted to a **SOFR OIS swap** because USD LIBOR is dead
-(2023) and Source II builds the entire curve framework around SOFR. The
-SOFR floating leg is daily-compounded in arrears — slightly fiddlier than
-LIBOR but more relevant. Keep any pre-existing LIBOR sanity check as
-scaffolding; the canonical Phase 0 deliverable is SOFR.
-
-Tasks:
-
-- Install Visual Studio 2022 (C++ workload), CMake, vcpkg, clang-format,
-  clang-tidy.
-- Set `VCPKG_ROOT`, run `vcpkg integrate install` once.
-- Create `vcpkg.json` manifest with `quantlib`, `eigen3`, `gtest`.
-- Minimal `CMakeLists.txt`. One example target. One test target.
-- `examples/01_sofr_hello_swap.cpp`: build a flat SOFR curve, price one
-  USD SOFR OIS swap using QuantLib's `OvernightIndexedSwap`, print NPV
-  and fair rate.
-- README "How to build" section actually works.
-
-Deliverable: `cmake --build && ctest` both succeed, `01_sofr_hello_swap`
-prints a sensible NPV.
-
-Milestone: tag `v0.1-env`.
+Keep modules small, tests assertion-based, inputs deterministic, and generated
+CSVs byte-reproducible. Do not copy the source material's notebook architecture.
 
 ---
 
-### Phase 1 — Hand-rolled mini pricer (Week 2)
+## MVP scope — Phases 0–3
 
-**Sources:** II §3.2.2 (IRS), II §6.1 (day count), II §2.2 (compound interest).
+### Phase 0 — Environment (implementation complete)
 
-**Goal:** understand what QuantLib does by writing a simplified SOFR-aware
-version.
+**Sources:** IQ Ch.2 and App. A for QuantLib wiring/conventions; II §3.2.2
+(IRS); IRC Lecture 1 as a secondary rates reference.
 
-Math note: `docs/math_notes/01_sofr_swap.md` — owner-written. Covers
-swap PV as sum of fixed/floating leg PVs, annuity, fair rate, par
-condition. For floating leg, cover both an IBOR-style simplification
-(simple rate over period) and SOFR-style (daily-compounded geometric
-average) — see Source II §2.1–2.2.
+**Goal:** establish a reproducible MSVC/CMake/vcpkg build with QuantLib and
+GoogleTest.
 
-Modules:
+The retained Phase 0 executable, `01_quantlib_hello_swap`, is a legacy
+USD-LIBOR `VanillaSwap` scaffold. It proves the toolchain and QuantLib wiring;
+it is not presented as current market practice. The Phase 1 QuantLib
+`OvernightIndexedSwap` comparison is the canonical SOFR validation.
 
-- `src/core/yield_curve.hpp` — abstract base, flat curve implementation.
-- `src/rates/fixed_leg.hpp`, `floating_leg.hpp`, `vanilla_swap.hpp` —
-  minimal hand-rolled pricer. Floating leg supports both simple-rate and
-  daily-compounded modes via a strategy parameter (Strategy pattern —
-  CPP Ch.5; open–closed `yield_curve` hierarchy — CPP Ch.2–3).
+Evidence:
 
-Tests:
+- `cmake --build` and `ctest` run successfully.
+- `examples/01_quantlib_hello_swap.cpp` produces the documented deterministic
+  output.
+- `vcpkg.json` pins the dependency baseline.
 
-- Par swap NPV ≈ 0 at fair rate.
-- Leg sign sanity (payer vs receiver).
-- Fair rate sanity (positive, in reasonable range).
-- Same trade priced by own engine vs QuantLib → diff < 1e-6.
+There is no retained `v0.1-env` tag; `v0.2-mini-pricer` is the first milestone
+tag in the repository. Do not manufacture a historical tag retroactively.
+
+---
+
+### Phase 1 — Hand-rolled mini pricer (implementation complete)
+
+**Sources:** II §2.2, §3.2.2, and §6.1; I §2 for collateralized discounting;
+IQ Ch.2 for the swap/instrument-engine comparison; IRC Lecture 1 as secondary.
+
+**Goal:** understand the pricing mechanics by implementing a simplified,
+single-curve SOFR-aware swap pricer and comparing it with QuantLib.
+
+Implemented:
+
+- `YieldCurve` with a flat continuously compounded implementation.
+- Fixed and floating legs plus payer/receiver swap valuation.
+- Simple-forward and projected daily-compounded accrual strategies.
+- Analytic sanity checks and a QuantLib `OvernightIndexedSwap` oracle.
+
+The implementation and 12 current tests are green, and the math note now states
+the implemented assumptions, scope boundaries, inputs, and outputs. The Phase 2
+implementation contract records finite-input regression hardening for these
+classes before the curve and risk code depends on them.
 
 Milestone: tag `v0.2-mini-pricer`.
 
 ---
 
-### Phase 2 — Curve bootstrapping + DV01 (Week 3)
+### Phase 2 — SOFR curve bootstrap + quote DV01 (current)
 
-**Sources:** II §3.3 (multi-curve construction), II §3.3.1 (SOFR curve calibration set), II §3.4 (Jacobian risk representation).
+**Sources:** II §3.3.1, especially Table 1 and Eq. (47), is primary. IRC
+Lecture 1 provides a second curve-stripping treatment. IQ App. A covers the
+QuantLib quote, interpolation, solver, handle, and error machinery used by the
+benchmark. GLA Ch.7 gives the broader finite-difference sensitivity context.
+Source II §3.4 is a later risk extension, not a Phase 2 MVP dependency.
 
-**Goal:** build a real SOFR curve and compute first-order risk.
+**Goal:** build a validated SOFR curve from the pinned SR3 futures and OIS
+fixture, then compute quote DV01 by complete bump-and-rebootstrap.
 
-Math note: `docs/math_notes/02_curve_bootstrapping.md`.
+**Pinned scope:**
 
-Modules:
+- Valuation date: 2026-01-15 at 3:00 p.m. ET.
+- SR3Z25–SR3Z28 plus 4Y, 5Y, 6Y, 7Y, 10Y, 12Y, 15Y, 20Y, and 30Y OIS.
+- SR3Z25 uses final historical SOFR fixings for its realized portion.
+- Piecewise log-linear discount curve with no futures convexity adjustment.
 
-- `examples/02_quantlib_sofr_curve_bootstrap.cpp` — use SOFR futures
-  helpers + OIS swap helpers → `PiecewiseYieldCurve`. Calibration set
-  modeled on Source II Table 1 (SR3H26 ... SR3Z28 futures + 4Y/5Y/7Y/
-  10Y/12Y/15Y/20Y/25Y/30Y OIS swaps).
-- `src/curves/piecewise_zero_curve.hpp` — own simplified piecewise
-  log-linear curve.
-- DV01 by bump-and-reprice.
+**Required deliverables:**
 
-Tests:
+- Hand-rolled sequential bootstrap with repricing diagnostics.
+- QuantLib benchmark using identical quotes, fixings, and conventions.
+- Deterministic `output/curve.csv`.
+- Direct quote-level DV01 using complete bump-and-rebootstrap scenarios.
 
-- Reprice input swaps with bootstrapped curve → repricing error < 1e-8.
-- Bump 1bp → DV01 has correct sign and rough magnitude.
-- Own curve vs QuantLib curve discount factors → diff small.
+**Acceptance:** calibration instruments reprice within the documented
+tolerances, discount factors are valid and positive, outputs are deterministic,
+and curve, PV, and DV01 results agree with the QuantLib benchmark.
 
-Stretch: implement the Jacobian-based risk representation from Source II
-§3.4 (project model-IFR sensitivities onto market-quote sensitivities).
-This is the proper hedging math but is optional for the MVP.
+**Current gate:** the sequential SR3 futures/OIS bootstrap, repricing
+diagnostics, deterministic curve output, direct quote DV01, finite-difference
+Jacobian cross-check, QuantLib comparison, and both Phase 2 examples are
+implemented; 59/59 tests are green, and both examples reproduce successfully.
+The phase remains open until the `v0.3-curve-dv01` tag is pushed.
+
+**Stretch complete:** the finite-difference calibration Jacobian and two-way
+DV01 cross-check are green. This work remains non-gating for
+`v0.3-curve-dv01`.
+
+**Deferred:** analytic calibration Jacobian and futures convexity adjustment.
 
 Milestone: tag `v0.3-curve-dv01`.
 
 ---
 
-### Phase 4a — xCcy basis + foreign-collateralized discounting (optional, post-MVP)
+### Phase 3 — Portfolio risk report (MVP)
 
-**Sources:** II §3.2.3 (basis swap), II §3.2.4 (xCcy basis swap, non-MTM),
-II §3.2.5 (FX forward and currency chain), II §3.3.2 (forward curve via
-basis), II §3.3.3 (foreign-collateralized discount curves), I §2
-(collateralized-pricing foundation — same framework as math note 01's
-appendix, now with collateral currency ≠ cash-flow currency).
+**Sources:** II §3.4 (market-risk representation) and II §5 (DV01 and the
+DV01-neutral steepener). IRC Lecture 14 provides a second treatment of input
+and forward-curve sensitivities. Source II §§4.2–4.3 support the optional PCA
+extension; GLA Ch.9 supplies broader risk-measure context.
 
-**Status: does NOT gate the v1.0 MVP.** Printed here for topic affinity
-with Phase 2 (it's the multi-currency extension of the same bootstrap), but
-**labeled 4a to make the execution order explicit**: it runs after Phase 4
-ships — realistic slot is Month 2, alongside or instead of Phase 5, ~1–2
-weeks. The earlier B-spline + Tikhonov regularized curve-fitting plan stays
-research-grade and out of scope entirely.
+**Goal:** consume the Phase 2 curve and a small swap portfolio, then produce the
+four deterministic CSV reports promised in the README.
 
-**Goal:** extend the Phase 2 single-currency framework to the multi-currency
-collateral-aware setting of Source II §3.3 — build the discount curve for
-EUR cash flows collateralized in USD, i.e. $P^{€,\$}(0,\cdot)$ per II
-Eq. (49)–(50).
+Math note: `docs/math_notes/03_dv01_krd_scenarios.md` — owner-written before
+any Phase 3 interface or test work. It must define DV01/KRD signs, bump shapes,
+scenario semantics, aggregation, inputs/outputs, and scope boundaries.
 
-Math note: `docs/math_notes/04_foreign_collateral_curves.md` — owner-written,
-covering: covered interest parity and the FX-forward currency chain (§3.2.5),
-the non-MTM xCcy basis swap's cash flows (§3.2.4), why USD collateral on a
-EUR leg forces a funding-spread-adjusted discount curve, and the IFR
-parameterization $\varphi^{€,\$}$ of Eq. (50).
+Dependency order:
 
-Prerequisites (from Phase 2, reused not rebuilt):
+1. Pin the trade and market-data CSV schemas.
+2. Price every trade and report NPV/fair rate.
+3. Compute portfolio DV01 and 2Y/5Y/10Y key-rate risk.
+4. Add parallel ±25 bp, steepener, and flattener scenarios.
+5. Write all four outputs deterministically and verify them byte-for-byte.
+6. **Stretch only after steps 1–5 are green:** generate a fixed-seed synthetic
+   curve history, then add PCA factors and eigen-scenarios from Source II
+   §§4.2–4.3.
 
-- The single-currency bootstrap machinery, run **twice**: USD SOFR curve
-  (already built) + a EUR OIS curve (ESTR — Source II's notation says
-  EONIA; treat as the EUR RFR discount curve).
-- Synthetic market data modeled on Source II Table 4
-  (EURIBOR-3M/SOFR-3M basis swaps, USD-collateralized) +
-  spot FX + FX forwards, bundled as `data/market/xccy_sample.csv`
-  (same precedent as Phase 4's synthetic curve history).
+Planned executable: `03_swap_portfolio_risk`.
 
-Modules:
+Required outputs:
 
-- `src/instruments/xccy_basis_swap.hpp` — non-MTM xCcy basis swap
-  (using `CrossCurrencyBasisSwapNonMTM` vocabulary; MTM
-  reset variant explicitly out of scope for v1).
-- `src/curves/fx_forward_chain.hpp` — spot + forward points → implied
-  FX forwards; covered-interest-parity utilities (II §3.2.5).
-- `src/curves/foreign_collateral_curve.hpp` — bootstrap
-  $P^{€,\$}(0,\cdot)$ from xCcy basis quotes given the two domestic
-  curves + EURIBOR forwards (II §3.3.3, Eq. 49); interpolate in IFR
-  space per Eq. (50), consistent with the Phase 2 curve's interpolation.
-- `examples/03_xccy_collateral_bootstrap.cpp` — end-to-end: read
-  `xccy_sample.csv`, build all three curves, write
-  `output/xccy_curves.csv` (USD-SOFR, EUR-ESTR, EUR-under-USD-collateral
-  discount factors side by side).
+- `output/curve.csv`
+- `output/swap_npv.csv`
+- `output/dv01_report.csv`
+- `output/scenario_pnl.csv`
 
-Tests:
+Required tests include KRD aggregation versus parallel DV01 within a tolerance
+defined in the note, scenario P&L sign checks, invalid CSV/input handling, and
+byte-identical repeat output. PCA rows may be added to `scenario_pnl.csv` if the
+stretch is completed, but PCA does not gate the MVP.
 
-- Reprice the calibrating xCcy basis swaps with the bootstrapped
-  $P^{€,\$}$ → repricing error < 1e-8 (same standard as Phase 2).
-- Covered interest parity: FX forward implied by the curve pair matches
-  the input FX forwards.
-- Sign sanity: negative EURIBOR/SOFR basis ⇒ $P^{€,\$}$ sits below /
-  above $P^{€,€}$ in the direction the math note derives — write the
-  expected direction down in the note *before* coding.
-- Degenerate case: zero basis + flat identical curves ⇒
-  $P^{€,\$} = P^{€,€}$ to machine precision.
-- Benchmark vs QuantLib where possible: `FxSwapRateHelper` +
-  `CrossCurrencyBasisSwapRateHelper` — note the latter lives in
-  `ql/experimental/`, so treat it as a sanity check, not gospel.
-
-Milestone: tag `v1.0.2-xccy` (post-MVP optional series, alongside
-`v1.0.1-xva`).
-
----
-
-### Phase 4 — Portfolio risk report (Week 4)
-
-**Sources:** II §4.2 (PCA hedging), II §4.3 (eigen-scenarios with worked numerical example), II §5 (DV01-neutral steepener).
-
-**Goal:** the MVP. Read a portfolio, write four CSVs including PCA-based
-eigen-scenarios alongside the standard parallel/steepener/flattener shocks.
-
-Math note: `docs/math_notes/03_dv01_krd_scenarios.md`. Cover DV01, KRD
-decomposition, parallel/steepener/flattener shock semantics, and the PCA
-construction from Source II §4 (eigen-decomposition of curve-change
-covariance, eigen-scenario shocks scaled by √λ).
-
-Modules:
-
-- `src/risk/dv01.hpp`
-- `src/risk/key_rate_duration.hpp`
-- `src/risk/scenario_engine.hpp` — supports both deterministic shocks
-  (parallel, steepener, flattener) and PCA-derived eigen-scenarios.
-- `src/risk/curve_pca.hpp` — PCA on a synthetic historical curve series
-  (we don't have real market history, so generate plausible series or
-  use a small bundled CSV).
-- `examples/04_swap_portfolio_risk.cpp` — reads
-  `data/trades/swaps_sample.csv`, writes the four MVP CSVs.
-
-Tests:
-
-- KRD at 2Y, 5Y, 10Y key tenors. Sum of KRDs ≈ DV01 (within
-  interpolation error).
-- Scenario: parallel ±25bp, steepener (long-end up, short-end down),
-  flattener (reverse). Sign of P&L matches DV01 expectation.
-- PCA: top 3 eigenvalues explain >90% of variance on the synthetic
-  series. PC1 shape is roughly flat (level), PC2 is monotone (slope),
-  PC3 is hump-shaped (curvature).
-- Reproducibility: same input CSV → same output CSV byte-for-byte.
-
-Deliverable: the four MVP CSVs listed in README. The `scenario_pnl.csv`
-now contains both deterministic and PCA-based eigen-scenarios in
-separate rows tagged by scenario type.
+**Optional extension — batch discounting on `YieldCurve` (architecture, not
+math; does not gate the MVP).** Phase 2's `YieldCurve` deliberately exposes
+only scalar `discount(Date)`; a portfolio report is the first place multiple
+cashflow dates are priced per curve per trade, so it's the natural point to
+revisit. Only add a virtual `discounts(span<const Date>)` (default
+implementation: loop `discount()`; concrete curves may override) if profiling
+the Phase 3 portfolio run actually shows the per-date loop as a measured cost.
+Do not add it speculatively — every existing `YieldCurve` implementation keeps
+working unchanged whether this is added now or later, so there is no cost to
+deferring it until a profiler asks for it.
 
 Milestone: tag `v1.0-mvp`. **This is the contract.**
 
 ---
 
-### Phase 4.5 — xVA awareness (optional, only if Phase 4 ships early)
+## Optional post-MVP work
 
-**Sources:** I §2 (CSA replication argument), I §3.1 (xVA decomposition), I §3.2 (CVA integral with EE/PD/LGD).
+### Phase 4 — xCcy basis + foreign-collateralized discounting
 
-**Goal:** demonstrate the modern collateralized-pricing framework on the
-existing swap portfolio. Not required for the MVP — listed because Source I
-provides the framework cleanly enough that this is achievable in 1 week if
-Phase 4 finishes ahead of schedule.
+**Sources:** II §§3.2.3–3.2.5 and §§3.3.2–3.3.3; I §2 for the
+collateralized-pricing foundation.
 
-Modules:
+**Status:** optional and strictly after Phase 3. It does not gate `v1.0-mvp`.
 
-- `src/risk/cva.hpp` — flat-hazard CVA approximation using
-  EE = (annuity × σ × √MPoR) / √(2π) under a Gaussian MTM proxy
-  (Source I §3.3).
-- `examples/045_swap_cva.cpp` — compute clean PV + simple CVA for each
-  swap in the portfolio, output to `output/cva_report.csv`.
+**Goal:** reuse the Phase 2 single-currency bootstrap to build USD SOFR and EUR
+RFR curves, then construct the curve for EUR cash flows collateralized in USD
+from xCcy basis quotes. Source II deliberately develops this after the domestic
+RFR curve and basis-forward curves, so the implementation should follow the
+same dependency order.
 
-Tests:
+Math note: `docs/math_notes/04_foreign_collateral_curves.md` — owner-written
+before implementation. It must cover the non-MTM xCcy cash flows, FX-forward
+currency chain, collateral-currency effect, curve parameterization, signs,
+inputs/outputs, and scope boundaries.
 
-- CVA > 0 for swaps with positive expected exposure.
-- CVA scales roughly linearly with hazard rate at small rates.
+Keep the first version to non-MTM xCcy basis swaps, covered-interest-parity
+checks, a deterministic synthetic quote file, explicit calibration diagnostics,
+and a QuantLib comparison where its experimental helpers are usable. MTM resets,
+B-splines, and Tikhonov regularization remain out of scope.
 
-Milestone: tag `v1.0.1-xva` if delivered. Otherwise defer to Phase 10.
+Milestone: `v1.0.2-xccy` if delivered.
+
+### Phase 4.5 — xVA awareness
+
+**Sources:** I §2, §3.1, and §§3.2–3.3.
+
+**Status:** optional and strictly after Phase 3. It does not gate `v1.0-mvp`.
+
+**Goal:** add a clearly labeled educational CVA approximation to the existing
+swap portfolio, separating the clean collateralized price from the valuation
+adjustment. The owner math note must define exposure direction, discounting,
+hazard/default assumptions, LGD, and the Gaussian margin-period-of-risk proxy
+before any implementation.
+
+Milestone: `v1.0.1-xva` if delivered; otherwise defer to Phase 10.
 
 ---
 
@@ -348,7 +326,7 @@ complication — the fixing is a compounded average over the accrual period,
 so vol decays as fixings accrue: introduce the **time-decay factor** and
 **time-decay SABR** (IV §3) and the backward- vs forward-looking parameter
 distinction (IV §3.4). Write the expected sign/limit behavior down *before*
-coding (same discipline as Phase 4a).
+coding (same discipline as Phase 4).
 
 Modules:
 
@@ -410,10 +388,10 @@ strike axis and vol convention do not.
 
 Milestone: tag `v1.3-sabr-rfr`.
 
-### Phase 8 — Decision point (Month 4)
+### Month-4 decision gate
 
-- Polish tests; confirm the >70% coverage target on `src/` has held
-  (tracked since Phase 2) and backfill any residual gaps.
+- Polish tests; inspect the automated coverage report, keep line coverage above
+  70%, and backfill meaningful untested branches rather than chasing the number.
 - Write a 2-page project summary suitable for résumé use or for sharing
   when consulting others for feedback.
 - **Decide** USD continuation vs. pivot to CNY — worth consulting others
@@ -430,7 +408,7 @@ These are written down so the long-term vision is visible. Do not start
 them without re-evaluating at Month 4. Time estimates are honest, not
 optimistic.
 
-### LMM Monte Carlo — ≥6 weeks
+### Phase 8 — LMM Monte Carlo (≥6 weeks)
 
 **Sources:** IRC Ch.11 (LMM depth). Complement: BM Ch.6 (the LIBOR/swap
 market models, LFM/LSM, and the drift under different measures), BM Ch.7
@@ -454,7 +432,7 @@ gatherer (Ch.5), exotics/path-generation engine (Ch.7). CPP says how to
 lay out the classes; GLA says what the numerics should actually do. This
 is where both earn their place most.
 
-### LSM Bermudan — 3–4 weeks, but only after Hull–White
+### Phase 9 — LSM Bermudan (3–4 weeks, only after Hull–White)
 
 **Sources:** IRC Ch.12 (optimal stopping, Bermudan-specific depth), I §3.4 (MC regression framework — basis functions + least-squares), GLA Ch.8 §8.6 (regression-based American-option pricing — the Longstaff–Schwartz algorithm, with §8.7 duality as an upper-bound check).
 
@@ -471,7 +449,7 @@ Do not implement LSM Bermudan on top of an unvalidated LMM. That couples
 two debugging surfaces and is the most likely place for the project to
 stall.
 
-### CCR / Exposure / CVA — scope tightly
+### Phase 10 — CCR / Exposure / CVA (scope tightly)
 
 **Sources:** IRC Ch.15 (CCR depth), I §3.2–3.3 (EE construction, MPoR, nested-MC critique → regression-based exposure), GLA Ch.9 (loss probabilities, VaR/PFE quantiles, delta–gamma variance reduction, §9.4 credit risk).
 

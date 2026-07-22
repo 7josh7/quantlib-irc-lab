@@ -26,4 +26,4 @@ protected:
     YieldCurve& operator=(YieldCurve&&) noexcept = default;
 };  // class YieldCurve
 
-} // namespace irc
+}  // namespace irc

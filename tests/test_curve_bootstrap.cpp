@@ -69,6 +69,38 @@ std::string replace_once(std::string text, const std::string& from, const std::s
     return text;
 }
 
+std::vector<std::string> split_lines(const std::string& text) {
+    std::vector<std::string> lines;
+    std::istringstream stream(text);
+    std::string line;
+    while (std::getline(stream, line)) {
+        lines.push_back(line);
+    }
+    return lines;
+}
+
+std::vector<std::string> split_fields(const std::string& line) {
+    std::vector<std::string> fields;
+    std::size_t start = 0;
+    while (true) {
+        const std::size_t comma = line.find(',', start);
+        const std::size_t end = comma == std::string::npos ? line.size() : comma;
+        fields.push_back(line.substr(start, end - start));
+        if (comma == std::string::npos) {
+            return fields;
+        }
+        start = comma + 1;
+    }
+}
+
+// Two pillars one and two years out, with log-discounts chosen so that every
+// zero rate and segment forward is exactly 0.04.
+irc::PiecewiseLogLinearCurve two_pillar_curve() {
+    return {ql::Date(15, ql::January, 2026),
+            {{ql::Date(15, ql::January, 2027), -0.04}, {ql::Date(15, ql::January, 2028), -0.08}},
+            ql::Actual365Fixed()};
+}
+
 irc::PiecewiseLogLinearCurve known_curve() {
     const ql::Date reference(15, ql::January, 2026);
     return {reference,
@@ -583,24 +615,105 @@ TEST(SofrBootstrapperTest, RejectsInvalidMarketsWithContext) {
 
 // --- E. Deterministic output ------------------------------------------------
 
-TEST(CurveIoTest, SerializerMatchesExactGoldenBytes) {
-    const ql::Date reference(15, ql::January, 2026);
-    const irc::PiecewiseLogLinearCurve curve(
-        reference,
-        {{ql::Date(15, ql::January, 2027), -0.04}, {ql::Date(15, ql::January, 2028), -0.08}},
-        ql::Actual365Fixed());
-    const std::string expected =
-        "date,t_act365f,discount,zero_cc,fwd_section\n"
-        "2026-01-15,0.0000000000000000e+00,1.0000000000000000e+00,,\n"
-        "2027-01-15,1.0000000000000000e+00,9.6078943915232321e-01,"
-        "4.0000000000000001e-02,4.0000000000000001e-02\n"
-        "2028-01-15,2.0000000000000000e+00,9.2311634638663576e-01,"
-        "4.0000000000000001e-02,4.0000000000000001e-02\n";
-    EXPECT_EQ(irc::serialize_curve_csv(curve), expected);
+// The serializer is tested in two halves, because its output mixes values
+// that IEEE-754 pins exactly with values that it does not.
+//
+// The format — column names and order, precision, the empty-column rule, line
+// endings, date shape — is fully determined, so it is compared as bytes.
+//
+// The discount column is exp(x). std::exp is not required by the C++ standard
+// or IEEE-754 to be correctly rounded, so two conforming implementations may
+// return doubles one ulp apart and print different 17th digits. Byte-comparing
+// that column would pin the test to one platform's libm rather than to the
+// serializer, so the numbers are checked against their mathematical values
+// with a tolerance instead. (QuantLib's own curve tests do the same: see
+// test-suite/piecewiseyieldcurve.cpp, `Real tolerance = 1.0e-9`.)
 
-    const irc::PiecewiseLogLinearCurve wrong_dc(
-        reference, {{ql::Date(15, ql::January, 2027), -0.04}}, ql::Actual360());
+TEST(CurveIoTest, SerializerFormatMatchesGoldenBytes) {
+    const std::string csv = irc::serialize_curve_csv(two_pillar_curve());
+
+    // Byte-exact through the anchor row: t = 0 and exp(0) = 1 are both exact
+    // in IEEE-754, so no libm result reaches these bytes.
+    const std::string expected_prefix =
+        "date,t_act365f,discount,zero_cc,fwd_section\n"
+        "2026-01-15,0.0000000000000000e+00,1.0000000000000000e+00,,\n";
+    EXPECT_EQ(csv.substr(0, std::min(csv.size(), expected_prefix.size())), expected_prefix);
+    EXPECT_TRUE(csv.ends_with("\n"));
+
+    const std::vector<std::string> lines = split_lines(csv);
+    ASSERT_EQ(lines.size(), 4);
+    EXPECT_EQ(lines[0], "date,t_act365f,discount,zero_cc,fwd_section");
+
+    for (std::size_t row = 1; row < lines.size(); ++row) {
+        const std::vector<std::string> fields = split_fields(lines[row]);
+        ASSERT_EQ(fields.size(), 5) << "row " << row;
+        EXPECT_EQ(fields[0].size(), 10) << "row " << row;
+        EXPECT_EQ(fields[0][4], '-') << "row " << row;
+        EXPECT_EQ(fields[0][7], '-') << "row " << row;
+        for (std::size_t field = 1; field < fields.size(); ++field) {
+            if (fields[field].empty()) {
+                continue;
+            }
+            // d.dddddddddddddddde+dd — one mantissa digit, 16 fraction digits
+            // (max_digits10 - 1), and a two-digit exponent. All values in this
+            // fixture are non-negative, so there is no sign character.
+            EXPECT_EQ(fields[field].size(), 22) << "row " << row << " field " << field;
+            EXPECT_EQ(fields[field].find('e'), 18U) << "row " << row << " field " << field;
+        }
+    }
+
+    // Only the anchor row leaves zero_cc and fwd_section empty: -log(P)/t is
+    // undefined at t = 0, and no segment ends at the first node.
+    EXPECT_EQ(split_fields(lines[1])[0], "2026-01-15");
+    EXPECT_TRUE(split_fields(lines[1])[3].empty());
+    EXPECT_TRUE(split_fields(lines[1])[4].empty());
+    EXPECT_EQ(split_fields(lines[2])[0], "2027-01-15");
+    EXPECT_FALSE(split_fields(lines[2])[3].empty());
+    EXPECT_FALSE(split_fields(lines[2])[4].empty());
+    EXPECT_EQ(split_fields(lines[3])[0], "2028-01-15");
+
+    const irc::PiecewiseLogLinearCurve wrong_dc(ql::Date(15, ql::January, 2026),
+                                                {{ql::Date(15, ql::January, 2027), -0.04}},
+                                                ql::Actual360());
     EXPECT_THROW((void)irc::serialize_curve_csv(wrong_dc), std::invalid_argument);
+}
+
+TEST(CurveIoTest, SerializedValuesMatchTheClosedForm) {
+    const std::vector<std::string> lines =
+        split_lines(irc::serialize_curve_csv(two_pillar_curve()));
+    ASSERT_EQ(lines.size(), 4);
+
+    // Expected discounts are the mathematical values of exp(-0.04) and
+    // exp(-0.08) to 21 digits, computed independently of this code. The
+    // tolerance is ~10 ulp at this magnitude: far tighter than any real
+    // formula error, far looser than the last-bit freedom std::exp has.
+    struct ExpectedRow {
+        double t;
+        double discount;
+        double zero_cc;
+        double fwd_section;
+    };
+    const std::vector<ExpectedRow> expected{
+        {0.0, 1.0, 0.0, 0.0},
+        {1.0, 0.960789439152323209439, 0.04, 0.04},
+        {2.0, 0.923116346386635782911, 0.04, 0.04},
+    };
+    constexpr double kTolerance = 1e-15;
+
+    for (std::size_t row = 0; row < expected.size(); ++row) {
+        const std::vector<std::string> fields = split_fields(lines[row + 1]);
+        ASSERT_EQ(fields.size(), 5) << "row " << row;
+        EXPECT_NEAR(std::stod(fields[1]), expected[row].t, kTolerance) << "t, row " << row;
+        EXPECT_NEAR(std::stod(fields[2]), expected[row].discount, kTolerance)
+            << "discount, row " << row;
+        if (row == 0) {
+            continue;  // the anchor reports neither a zero rate nor a segment
+        }
+        EXPECT_NEAR(std::stod(fields[3]), expected[row].zero_cc, kTolerance)
+            << "zero_cc, row " << row;
+        EXPECT_NEAR(std::stod(fields[4]), expected[row].fwd_section, kTolerance)
+            << "fwd_section, row " << row;
+    }
 }
 
 TEST(CurveIoTest, WriterRoundTripsBytesAndRejectsMissingParent) {

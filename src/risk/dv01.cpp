@@ -28,18 +28,45 @@ std::vector<double> curve_node_sensitivities(const PiecewiseLogLinearCurve& curv
                                              const CurvePricer& pv, double node_half_width) {
     validate_half_width(node_half_width, "curve_node_sensitivities");
     validate_pricer(pv, "curve_node_sensitivities");
-    (void)curve;
-    throw std::logic_error("curve_node_sensitivities: not implemented (Phase 2 step 4)");
+    std::vector<double> result;
+    const std::span<const CurveNode> nodes = curve.nodes();
+    result.reserve(nodes.size() - 1);
+    for (std::size_t i = 1; i < nodes.size(); ++i) {
+        double s_i =
+            (pv(bump_node(curve, i, node_half_width)) - pv(bump_node(curve, i, -node_half_width))) /
+            (2.0 * node_half_width);
+        result.push_back(s_i);
+    }
+    return result;
 }
-
 std::vector<double> quote_dv01_direct(const SofrMarketData& market,
                                       const SofrCurveBootstrapper& bootstrapper,
                                       const CurvePricer& pv, double quote_half_width) {
     validate_half_width(quote_half_width, "quote_dv01_direct");
     validate_pricer(pv, "quote_dv01_direct");
-    (void)market;
-    (void)bootstrapper;
-    throw std::logic_error("quote_dv01_direct: not implemented (Phase 2 step 4)");
+    SofrMarketData bumped = market; 
+    std::vector<double> result;
+    result.reserve(bumped.futures.size() + bumped.ois.size());    
+    for (std::size_t i = 0; i < bumped.futures.size(); ++i) {
+        const double price = bumped.futures[i].price;
+        bumped.futures[i].price = price - 100.0 * quote_half_width;
+        const BootstrapResult up = bootstrapper.bootstrap(bumped);
+        bumped.futures[i].price = price + 100.0 * quote_half_width;
+        const BootstrapResult down = bootstrapper.bootstrap(bumped);
+        bumped.futures[i].price = price;
+        result.push_back((pv(up.curve) - pv(down.curve)) / (2.0 * quote_half_width) * 1e-4);
+    }
+    for (std::size_t i = 0; i < bumped.ois.size(); ++i) {
+        const double rate = bumped.ois[i].par_rate;
+        bumped.ois[i].par_rate = rate + quote_half_width;
+        BootstrapResult res_u = bootstrapper.bootstrap(bumped);
+        bumped.ois[i].par_rate = rate - quote_half_width;
+        BootstrapResult res_d = bootstrapper.bootstrap(bumped);
+        const double s_i = (pv(res_u.curve) - pv(res_d.curve)) / (2.0 * quote_half_width) * 1e-4;
+        result.push_back(s_i);
+        bumped.ois[i].par_rate = rate;
+    }
+    return result;
 }
 
 std::vector<std::vector<double>> calibration_jacobian(const SofrMarketData& market,
@@ -47,10 +74,21 @@ std::vector<std::vector<double>> calibration_jacobian(const SofrMarketData& mark
                                                       const PiecewiseLogLinearCurve& curve,
                                                       double node_half_width) {
     validate_half_width(node_half_width, "calibration_jacobian");
-    (void)market;
-    (void)bootstrapper;
-    (void)curve;
-    throw std::logic_error("calibration_jacobian: not implemented (Phase 2 step 4)");
+    // The curve constructor rejects empty pillars and always prepends the anchor,
+    // so nodes().size() >= 2 and m >= 1 — this subtraction cannot underflow.
+    const std::size_t m = curve.nodes().size() - 1;
+    std::vector<std::vector<double>> jacobian(m, std::vector<double>(m, 0.0));
+
+    for (std::size_t n = 1; n <= m; ++n) {
+        const std::vector<double> up =
+            bootstrapper.model_quotes(market, bump_node(curve, n, node_half_width));
+        const std::vector<double> down =
+            bootstrapper.model_quotes(market, bump_node(curve, n, -node_half_width));
+        for (std::size_t row = 0; row < m; ++row) {
+            jacobian[row][n - 1] = (up[row] - down[row]) / (2.0 * node_half_width);
+        }
+    }
+    return jacobian;
 }
 
 std::vector<double> quote_dv01_via_jacobian(const std::vector<std::vector<double>>& jacobian,
@@ -99,8 +137,21 @@ std::vector<double> quote_dv01_via_jacobian(const std::vector<std::vector<double
                                         std::to_string(column) + " is singular");
         }
     }
-
-    throw std::logic_error("quote_dv01_via_jacobian: not implemented (Phase 2 step 4)");
+    std::vector<double> result(size);
+    std::vector<double> quote_sensitivities(size, 0.0);
+    for (std::size_t n = size; n-- > 0;) {  // size-1 down to 0
+        double sum = curve_sensitivities[n];
+        for (std::size_t m = n + 1; m < size; ++m) {
+            sum -= jacobian[m][n] * quote_sensitivities[m];
+        }
+        quote_sensitivities[n] = sum / jacobian[n][n];
+        if (!std::isfinite(quote_sensitivities[n])) {
+            throw std::runtime_error("quote_dv01_via_jacobian: non-finite intermediate at index " +
+                                     std::to_string(n));
+        }
+        result[n] = quote_sensitivities[n] * 1e-4;
+    }
+    return result;
 }
 
 }  // namespace irc

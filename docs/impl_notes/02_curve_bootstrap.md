@@ -1059,11 +1059,17 @@ rates layer.
 
 22. `serialize_curve_csv` for a tiny known-node curve is checked in two
     halves. **Format** is byte-exact: header, the anchor row, five fields per
-    row, the ISO date shape, a fixed 22-character scientific field width
-    (one mantissa digit, 16 fraction digits, two-digit exponent), blank
-    anchor fields, `\n` endings, and the final newline. Byte comparison runs
-    through the anchor row because `t = 0` and `exp(0) = 1` are exact in
-    IEEE-754. **Values** are compared to their closed forms at `1e-15`:
+    row, the ISO date shape, the scientific field *shape* (optional minus,
+    one mantissa digit, 16 fraction digits = `max_digits10 - 1`, signed
+    exponent of at least two digits), blank anchor fields, `\n` endings, and
+    the final newline. The field *width* is deliberately not asserted:
+    negative rates — which the loader accepts — add a sign character, so a
+    fixed width would describe only one fixture. A second curve with positive
+    log-discounts exercises that path. Byte comparison runs through the anchor
+    row because `t = 0` and `exp(0) = 1` are exact in IEEE-754. **Values** are
+    compared to their closed forms at a *relative* `1e-15`, which is a handful
+    of ulp at every magnitude in the file (an absolute `1e-15` would be 9 ulp
+    at the discounts but 144 ulp at the rate columns):
     `std::exp` is not required by the standard or IEEE-754 to be correctly
     rounded, so byte-comparing a column derived from it would pin the suite
     to one platform's libm rather than to the serializer. A non-Act/365F

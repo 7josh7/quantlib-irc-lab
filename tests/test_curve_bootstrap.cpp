@@ -93,6 +93,58 @@ std::vector<std::string> split_fields(const std::string& line) {
     }
 }
 
+// [-]d.dddddddddddddddde{+,-}dd — an optional minus, one mantissa digit,
+// exactly 16 fraction digits (max_digits10 - 1), and a signed exponent of at
+// least two digits. The total width is deliberately not asserted: a negative
+// value adds a sign character and a magnitude past 1e100 adds an exponent
+// digit, so a fixed width would only describe one fixture.
+::testing::AssertionResult is_scientific_16(const std::string& field) {
+    const auto digit_run = [&field](std::size_t from) {
+        std::size_t count = 0;
+        while (from + count < field.size() && field[from + count] >= '0' &&
+               field[from + count] <= '9') {
+            ++count;
+        }
+        return count;
+    };
+
+    std::size_t i = 0;
+    if (i < field.size() && field[i] == '-') {
+        ++i;
+    }
+    if (digit_run(i) != 1) {
+        return ::testing::AssertionFailure() << field << ": expected one mantissa digit";
+    }
+    ++i;
+    if (i >= field.size() || field[i] != '.') {
+        return ::testing::AssertionFailure() << field << ": expected '.' after the mantissa digit";
+    }
+    ++i;
+    const std::size_t fraction = digit_run(i);
+    if (fraction != 16) {
+        return ::testing::AssertionFailure()
+               << field << ": expected 16 fraction digits, found " << fraction;
+    }
+    i += fraction;
+    if (i >= field.size() || field[i] != 'e') {
+        return ::testing::AssertionFailure() << field << ": expected 'e' after the fraction";
+    }
+    ++i;
+    if (i >= field.size() || (field[i] != '+' && field[i] != '-')) {
+        return ::testing::AssertionFailure() << field << ": expected a signed exponent";
+    }
+    ++i;
+    const std::size_t exponent = digit_run(i);
+    if (exponent < 2) {
+        return ::testing::AssertionFailure()
+               << field << ": expected at least two exponent digits, found " << exponent;
+    }
+    if (i + exponent != field.size()) {
+        return ::testing::AssertionFailure() << field << ": trailing characters after the exponent";
+    }
+    return ::testing::AssertionSuccess();
+}
+
 // Two pillars one and two years out, with log-discounts chosen so that every
 // zero rate and segment forward is exactly 0.04.
 irc::PiecewiseLogLinearCurve two_pillar_curve() {
@@ -654,11 +706,7 @@ TEST(CurveIoTest, SerializerFormatMatchesGoldenBytes) {
             if (fields[field].empty()) {
                 continue;
             }
-            // d.dddddddddddddddde+dd — one mantissa digit, 16 fraction digits
-            // (max_digits10 - 1), and a two-digit exponent. All values in this
-            // fixture are non-negative, so there is no sign character.
-            EXPECT_EQ(fields[field].size(), 22) << "row " << row << " field " << field;
-            EXPECT_EQ(fields[field].find('e'), 18U) << "row " << row << " field " << field;
+            EXPECT_TRUE(is_scientific_16(fields[field])) << "row " << row << " field " << field;
         }
     }
 
@@ -672,6 +720,25 @@ TEST(CurveIoTest, SerializerFormatMatchesGoldenBytes) {
     EXPECT_FALSE(split_fields(lines[2])[4].empty());
     EXPECT_EQ(split_fields(lines[3])[0], "2028-01-15");
 
+    // Negative rates are legitimate market data — the loader accepts a negative
+    // OIS quote — and a positive log-discount produces them. Every affected
+    // field then carries a sign character, so the shape rule is exercised there
+    // too rather than only on the non-negative fixture above.
+    const irc::PiecewiseLogLinearCurve negative_rates(
+        ql::Date(15, ql::January, 2026),
+        {{ql::Date(15, ql::January, 2027), 0.01}, {ql::Date(15, ql::January, 2028), 0.02}},
+        ql::Actual365Fixed());
+    const std::vector<std::string> negative_lines =
+        split_lines(irc::serialize_curve_csv(negative_rates));
+    ASSERT_EQ(negative_lines.size(), 4);
+    const std::vector<std::string> negative_fields = split_fields(negative_lines[2]);
+    ASSERT_EQ(negative_fields.size(), 5);
+    EXPECT_EQ(negative_fields[3].front(), '-') << "zero_cc: " << negative_fields[3];
+    EXPECT_EQ(negative_fields[4].front(), '-') << "fwd_section: " << negative_fields[4];
+    for (std::size_t field = 1; field < negative_fields.size(); ++field) {
+        EXPECT_TRUE(is_scientific_16(negative_fields[field])) << "negative field " << field;
+    }
+
     const irc::PiecewiseLogLinearCurve wrong_dc(ql::Date(15, ql::January, 2026),
                                                 {{ql::Date(15, ql::January, 2027), -0.04}},
                                                 ql::Actual360());
@@ -684,9 +751,17 @@ TEST(CurveIoTest, SerializedValuesMatchTheClosedForm) {
     ASSERT_EQ(lines.size(), 4);
 
     // Expected discounts are the mathematical values of exp(-0.04) and
-    // exp(-0.08) to 21 digits, computed independently of this code. The
-    // tolerance is ~10 ulp at this magnitude: far tighter than any real
-    // formula error, far looser than the last-bit freedom std::exp has.
+    // exp(-0.08) to 21 digits, computed independently of this code.
+    //
+    // The tolerance is relative, not absolute, so the slack tracks each
+    // column's magnitude. An absolute 1e-15 would be 9 ulp at the discounts
+    // near 0.96 but 144 ulp at the 0.04 rate fields, where an ulp is only
+    // 6.9e-18. Relative 1e-15 is a handful of ulp everywhere.
+    //
+    // Only the discount column needs slack at all: std::exp is the one libm
+    // call reaching the output. t, zero_cc and fwd_section are exact binary
+    // arithmetic on the stored log-discounts — 0.08 is exactly twice 0.04 in
+    // binary, so both the division and the subtraction are exact here.
     struct ExpectedRow {
         double t;
         double discount;
@@ -698,20 +773,23 @@ TEST(CurveIoTest, SerializedValuesMatchTheClosedForm) {
         {1.0, 0.960789439152323209439, 0.04, 0.04},
         {2.0, 0.923116346386635782911, 0.04, 0.04},
     };
-    constexpr double kTolerance = 1e-15;
+    constexpr double kRelativeTolerance = 1e-15;
+    const auto slack = [](double reference) { return std::abs(reference) * kRelativeTolerance; };
 
     for (std::size_t row = 0; row < expected.size(); ++row) {
         const std::vector<std::string> fields = split_fields(lines[row + 1]);
         ASSERT_EQ(fields.size(), 5) << "row " << row;
-        EXPECT_NEAR(std::stod(fields[1]), expected[row].t, kTolerance) << "t, row " << row;
-        EXPECT_NEAR(std::stod(fields[2]), expected[row].discount, kTolerance)
+        EXPECT_NEAR(std::stod(fields[1]), expected[row].t, slack(expected[row].t))
+            << "t, row " << row;
+        EXPECT_NEAR(std::stod(fields[2]), expected[row].discount, slack(expected[row].discount))
             << "discount, row " << row;
         if (row == 0) {
             continue;  // the anchor reports neither a zero rate nor a segment
         }
-        EXPECT_NEAR(std::stod(fields[3]), expected[row].zero_cc, kTolerance)
+        EXPECT_NEAR(std::stod(fields[3]), expected[row].zero_cc, slack(expected[row].zero_cc))
             << "zero_cc, row " << row;
-        EXPECT_NEAR(std::stod(fields[4]), expected[row].fwd_section, kTolerance)
+        EXPECT_NEAR(std::stod(fields[4]), expected[row].fwd_section,
+                    slack(expected[row].fwd_section))
             << "fwd_section, row " << row;
     }
 }

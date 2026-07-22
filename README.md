@@ -1,156 +1,116 @@
-# IRC - Interest Rate and Credit Models Implementation Lab
+# Interest Rate and Credit Models Implementation Lab
 
-A C++ / QuantLib implementation project building a fixed-income analytics
-engine: SOFR curve construction, swap and CDS pricing, vol modeling, short-rate
-models, and risk analytics. Each module is backed by math notes, unit tests,
-and a QuantLib benchmark where possible.
+An auditable C++20 / QuantLib learning project for fixed-income pricing, curve
+construction, and risk.
 
-The reference spine is a modern four-part series (foundations, curves, vol,
-RFR) plus Lesniewski's *Interest Rate and Credit Models*. Brigo–Mercurio and
-Glasserman provide model-theory and numerical back-stops; Joshi and Ballabio's
-*Implementing QuantLib* provide C++/library-design context. Local working copies
-live in `docs/ref/`. See [docs/sources.md](docs/sources.md) for the complete
-nine-source phase mapping and rules of priority.
+The project builds small pieces of an interest-rate analytics engine by hand,
+then checks the mathematics and numerical behavior with analytic identities and
+QuantLib comparisons. The emphasis is on explicit assumptions, readable code,
+deterministic inputs, and tests that explain what each module must do. It is a
+learning and portfolio project, not a production pricing or risk system.
 
-This is a learning and portfolio project, not a production risk system. The
-MVP is Phases 0–3: environment, mini pricer, SOFR curve + quote DV01, and a
-deterministic portfolio risk report. Phase 4 and later work does not begin
-until that MVP is reproducible.
+## Current state
 
-## Status
+The repository is partway through Phase 2. The simplified swap pricer is
+complete; the SOFR curve foundations are implemented; the sequential bootstrap
+and quote-DV01 calculations remain intentional test-first exercises.
 
-| Phase | State | Evidence / next gate |
+| Phase | State | What exists |
 |---|---|---|
-| 0 — Environment | Implementation complete | MSVC/CMake/vcpkg build, legacy QuantLib swap scaffold, GoogleTest wiring; no standalone `v0.1-env` tag was retained |
-| 1 — Mini pricer | Implementation complete | 15 green tests, including finite-input validation; analytic checks, QuantLib SOFR OIS comparison, and tag `v0.2-mini-pricer` |
-| 2 — SOFR curve + quote DV01 | Current | 53 tests discovered, 40 green and 13 intentionally red. Bracketed bisection, the interpolator, the piecewise log-linear curve, curve instruments, `CouponPeriod` and the payment-lag legs, the market-data loader, and the deterministic CSV writer are complete. The next gate is `SofrCurveBootstrapper`, which clears 6 of the 13 red tests; `risk/dv01` follows and clears the rest |
-| 3 — Portfolio risk report | Planned | Produces the four MVP CSVs after Phase 2 is green |
+| 0 — Environment | Complete | MSVC/CMake/vcpkg build, GoogleTest wiring, and a retained QuantLib swap example |
+| 1 — Mini pricer | Complete | Flat discount curve, fixed and floating legs, SOFR-aware accrual strategies, swap NPV/fair rate, analytic tests, and a QuantLib OIS comparison; tagged `v0.2-mini-pricer` |
+| 2 — SOFR curve + quote DV01 | In progress | Solver, interpolation, piecewise log-linear curve, curve instruments, payment-lag cash flows, market-data loading, and deterministic curve serialization are implemented. `SofrCurveBootstrapper` and the DV01 calculations are still validation-only stubs |
+| 3 — Portfolio risk report | Planned | No Phase 3 executable or generated portfolio reports exist yet |
 
-MSVC static native line coverage is configured with a 70% threshold over
-`src/`. The current percentage is not recorded until the coverage target is
-run against a build containing the Phase 2 implementation.
+The current checkout therefore contains an intentionally red portion of the
+test suite. Those tests specify the unfinished bootstrap and risk work; they
+are not being presented as passing functionality. The last complete green
+milestone is `v0.2-mini-pricer`.
 
-See [docs/roadmap.md](docs/roadmap.md) for the full plan.
+The full execution plan, including what is MVP scope versus later research, is
+in [docs/roadmap.md](docs/roadmap.md).
 
-## MVP contract
+## Implemented capabilities
 
-When Phase 3 is complete, this command must produce four CSVs from pinned sample
-inputs:
+- A continuously compounded flat discount curve behind a small `YieldCurve`
+  interface.
+- Fixed and floating swap legs with payer/receiver NPV and fair-rate
+  calculations.
+- Simple-forward and projected daily-compounded floating-rate accrual.
+- QuantLib-based calendars, day counts, coupon schedules, and payment lag.
+- A bracketed bisection solver, vectorized linear-flat interpolation, and a
+  piecewise log-linear discount curve.
+- Parsing and validation of a pinned SOFR fixture, including realized
+  calendar-day-weighted overnight accumulation.
+- Deterministic curve CSV formatting and explicit failures for malformed or
+  non-finite input.
+- Analytic sanity checks and a green QuantLib OIS comparison for the mini
+  pricer. Curve-level QuantLib comparisons are already specified in the red
+  Phase 2 tests.
 
-```powershell
-cmake --build "$env:USERPROFILE\irc-build" --config Release
-& "$env:USERPROFILE\irc-build\Release\03_swap_portfolio_risk.exe"
-```
+The Phase 2 fixture is deliberately hybrid: the historical SOFR fixings are
+real final observations, while the SR3 futures and OIS quotes are synthetic and
+internally deterministic. It is not represented as a historical market
+snapshot. The exact conventions and fixture contract are documented in
+[docs/impl_notes/02_curve_bootstrap.md](docs/impl_notes/02_curve_bootstrap.md).
 
-Outputs:
+## Build and run
 
-```text
-output/curve.csv            zero/discount/forward curve
-output/swap_npv.csv         per-trade NPV and fair rate
-output/dv01_report.csv      DV01 and key-rate durations (2Y/5Y/10Y)
-output/scenario_pnl.csv     parallel +/-25bp, steepener, flattener P&L
-```
+The primary environment is Windows with:
 
-PCA eigen-scenarios from Source II §§4.2–4.3 are a post-MVP stretch and may be
-added as separately tagged rows in `scenario_pnl.csv`; they do not gate
-`v1.0-mvp`.
+- Visual Studio 2022 and the **Desktop development with C++** workload
+- CMake 3.21 or later (required by the checked-in preset schema)
+- vcpkg, either bundled with Visual Studio or installed separately
 
-The MVP also requires passing `ctest`, build instructions that work from a
-clean clone, and three completed owner-written math notes in
-`docs/math_notes/`.
+Dependencies are declared in [vcpkg.json](vcpkg.json). Use a **Developer
+PowerShell for VS 2022** from the repository root.
 
-## Tech Stack
-
-- C++20, MSVC (Visual Studio 2022) on Windows 11
-- CMake >= 3.20
-- vcpkg in manifest mode (`vcpkg.json` in repo root)
-- QuantLib, Eigen
-- GoogleTest
-- clang-format, clang-tidy
-
-## Build
-
-Prerequisites:
-
-- Visual Studio 2022 with the C++ workload
-- CMake from Visual Studio or on PATH
-- vcpkg from Visual Studio or a standalone clone
-
-Use **Developer PowerShell for VS 2022**. Keep the build directory outside the
-source tree; this avoids build clutter and also avoids timestamp problems if a
-clone happens to live in a synced folder.
-
-If using the Visual Studio bundled vcpkg:
+The checked-in preset uses the `x64-windows-static` triplet and assumes the
+default Visual Studio 2022 Community vcpkg location:
 
 ```powershell
-$env:VCPKG_ROOT = "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\vcpkg"
+cmake --preset vs2022-x64-static
+cmake --build --preset release
 ```
 
-From the repository root (`quantlib-irc-lab/`):
+If vcpkg is elsewhere, set `VCPKG_ROOT` and override the preset's toolchain
+path when configuring:
 
 ```powershell
-cmake -S . -B "$env:USERPROFILE\irc-build" `
-  -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
-  -DVCPKG_TARGET_TRIPLET=x64-windows-static
+$env:VCPKG_ROOT = "C:\path\to\vcpkg"
 
-cmake --build "$env:USERPROFILE\irc-build" --config Release
-ctest --test-dir "$env:USERPROFILE\irc-build" -C Release --output-on-failure
+cmake --preset vs2022-x64-static `
+  -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake"
+cmake --build --preset release
+```
+
+Build products are written outside the source tree to
+`C:\Users\<you>\irc-build`.
+
+### Run the implemented green baseline
+
+The smoke and mini-pricer test executables are green at the current checkpoint:
+
+```powershell
+& "$env:USERPROFILE\irc-build\Release\irc_smoke_tests.exe"
+& "$env:USERPROFILE\irc-build\Release\test_mini_pricer.exe"
+```
+
+To run the complete suite, including the intentionally red Phase 2
+specification:
+
+```powershell
+ctest --preset release --output-on-failure
+```
+
+The retained executable is a legacy USD-LIBOR swap used only to prove the
+QuantLib toolchain and conventions wiring:
+
+```powershell
 & "$env:USERPROFILE\irc-build\Release\01_quantlib_hello_swap.exe"
 ```
 
-### Visual Studio
-
-If opening the folder directly in Visual Studio, use the preset:
-
-```text
-vs2022-x64-static
-```
-
-If Visual Studio shows "CMake Generation Failed", it is usually using its
-default Debug configuration without vcpkg. In Visual Studio:
-
-1. Select the `vs2022-x64-static` configure preset.
-2. Delete the old CMake cache if Visual Studio already generated one.
-3. Generate the cache again.
-
-The preset writes build output to:
-
-```text
-C:\Users\<you>\irc-build
-```
-
-### Coverage
-
-The coverage preset uses Microsoft's recommended static native
-instrumentation (`/PROFILE`) and writes a Cobertura report containing only
-lines under `src/`. It fails when line coverage is below 70%. See Microsoft's
-[Visual Studio coverage documentation](https://learn.microsoft.com/en-us/visualstudio/test/using-code-coverage-to-determine-how-much-code-is-being-tested?view=vs-2022)
-for the collector and static-instrumentation requirements.
-
-Visual Studio 2022 Community 17.14 can build and run this repository's tests,
-but it does not expose the native coverage data collector used by this target.
-Run the coverage target with Visual Studio Enterprise or on a Windows CI image
-that includes that collector; there is no Community installer checkbox named
-**Code coverage tools**.
-
-```powershell
-cmake --preset vs2022-x64-static-coverage
-cmake --build --preset coverage --target coverage
-```
-
-The report is written to:
-
-```text
-C:\Users\<you>\irc-coverage-build\coverage\coverage.cobertura.xml
-```
-
-Override the threshold at configure time only when the roadmap changes:
-
-```powershell
-cmake --preset vs2022-x64-static-coverage -DIRC_COVERAGE_MIN_LINE_PERCENT=75
-```
-
-Expected output from the retained Phase 0 **legacy LIBOR scaffold**:
+Expected deterministic output:
 
 ```text
 Valuation date = May 23rd, 2026
@@ -160,62 +120,74 @@ NPV of vanilla IRS = 388.107960
 Fair fixed rate = 0.040087
 ```
 
-## Repo Layout
+It is not the project's statement of current SOFR market practice. The Phase 1
+`OvernightIndexedSwap` test is the canonical QuantLib comparison for the
+SOFR-aware mini pricer.
 
-The current repository is intentionally slim. Planned `data/`, `curves/`,
-`risk/`, and `output/` directories are added only when their phase begins.
+### Optional coverage target
+
+An MSVC static native line-coverage target is configured with a 70% threshold
+over `src/`. It requires a Visual Studio installation that provides the native
+coverage collector and a green test suite:
+
+```powershell
+cmake --preset vs2022-x64-static-coverage
+cmake --build --preset coverage --target coverage
+```
+
+The Cobertura report is written beneath
+`C:\Users\<you>\irc-coverage-build\coverage`.
+
+## Repository layout
 
 ```text
 quantlib-irc-lab/
-  CMakeLists.txt
-  CMakePresets.json
-  cmake/
-    run_msvc_coverage.ps1
-  vcpkg.json
-  README.md
-  AGENTS.md
+  cmake/                 MSVC coverage helper
+  data/market/           pinned SOFR quotes and fixings
   docs/
-    roadmap.md
-    sources.md
-    impl_notes/
-    math_notes/
-    ref/                    local source material; ignored by git
+    math_notes/          owner-written formulas, assumptions, inputs, outputs
+    impl_notes/          approved interfaces and executable specifications
+    roadmap.md           phase scope, gates, and future work
+    sources.md           reference roles and phase mapping
+  examples/              runnable QuantLib wiring example
   src/
-    core/
-    rates/
-  tests/
-  examples/
+    core/                curve abstraction, interpolation, and solver
+    curves/              instruments, market data, curve I/O, bootstrap API
+    rates/               accrual, cash-flow legs, and swap pricing
+    risk/                Phase 2 DV01 API and validation stubs
+  tests/                 analytic checks, validation tests, and QuantLib oracles
 ```
 
-## Operating Rules
+Generated build products and CSV output are ignored by Git.
 
-Detailed rules for working in this repo, including AI assistants, are in
-[AGENTS.md](AGENTS.md). The two that matter most:
+## Development approach
 
-1. **The repo owner writes the math note and the implementation.** AI writes
-   the interface proposal, the red tests, and the post-green review—not the
-   implementation, unless explicitly asked for a given module. Phase 1 is the
-   documented worked-example exception.
-2. **No implementation lands before a math note exists** for it.
+QuantLib supplies market conventions such as calendars, day counts, schedules,
+and benchmark implementations. The model core is kept small and hand-written
+so its formulas and failure modes remain inspectable.
 
-## Source Material
+Every module starts from an owner-written math note covering its formula,
+assumptions, scope boundaries, inputs, and outputs. Tests then provide analytic
+checks or a like-for-like QuantLib comparison. Inputs are validated explicitly;
+examples and CSV output are deterministic.
 
-> **Note:** the reference works listed below are **not committed to this
-> repo**—their redistribution rights are unclear.
-> If you're following along, obtain your own copies and place them under
-> `docs/ref/`. That directory, including extracted Markdown working copies, is
-> ignored by git. The committed code, owner math notes, source map, and roadmap
-> should stand on their own.
+The detailed contribution and AI-assistance workflow is in
+[AGENTS.md](AGENTS.md). Numerical mismatches are investigated using
+[docs/numerical_debug_checklist.md](docs/numerical_debug_checklist.md).
 
-Phase mapping in [docs/sources.md](docs/sources.md).
+## Roadmap and references
 
-- `docs/ref/i-modern-pricing-theory-in-practice.md` — foundations, collateralized pricing, xVA, and MC regression
-- `docs/ref/ii-yield-curve-and-all-that.md` — SOFR bootstrap, multi-curve/xCcy construction, Jacobian risk, PCA, and curve scenarios
-- `docs/ref/iii-volatility-modeling.md` — Bachelier, Dupire local vol, SABR, and smile-risk Greeks
-- `docs/ref/iv-breaking-down-risk-free-rate-rfr-modeling.md` — backward-looking RFR caplets, time-decay SABR, and basket aggregation
-- `docs/ref/IRC.pdf` — Lesniewski, *Interest Rate and Credit Models* (Hull–White, LMM, Bermudan/LSM, CCR)
-- `docs/ref/[Springer 2006] Interest Rate Models Theory and Practice With Smile, Inflation and Credit.pdf` — Brigo & Mercurio; model-theory back-stop, not SOFR conventions
-- `docs/ref/Monte_Carlo_Methods_In_Financial_Enginee.pdf` — Glasserman; Monte Carlo numerics
-- `docs/ref/cpp-design-patterns-and-derivatives-pricing.pdf` — Joshi; code architecture with pre-C++11 idioms modernized
-- `docs/ref/IMPLEMENTING QUANTLIB.pdf` — Ballabio; QuantLib instruments/engines, conventions, quotes, interpolation, solvers, handles, and design patterns
-- QuantLib — https://www.quantlib.org/
+The MVP ends with a reproducible SOFR curve, complete quote bump-and-rebootstrap
+DV01, and a deterministic small-portfolio risk report. Foreign-collateralized
+curves, xVA, credit, volatility, and short-rate models are later roadmap topics,
+not current repository capabilities.
+
+The project's primary modern references are a four-part series covering
+collateralized pricing, curve construction, volatility, and backward-looking
+RFR products, supplemented by Lesniewski, Brigo–Mercurio, Glasserman, Joshi,
+Ballabio, and QuantLib. Their exact roles and priority rules are recorded in
+[docs/sources.md](docs/sources.md).
+
+Local working copies of reference books and papers belong under `docs/ref/`
+and are intentionally excluded from version control. The committed math notes,
+implementation contracts, tests, and code are intended to stand on their own.

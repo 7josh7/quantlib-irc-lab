@@ -467,6 +467,59 @@ TEST(CurveInstrumentTest, FuturesPriceRateConversionRoundTrips) {
     EXPECT_NEAR(bumped_price - 95.75, -0.01, 1e-14);
 }
 
+TEST(CurveInstrumentTest, FuturesLogForwardDiscountMatchesClosedForm) {
+    const irc::SofrFutureQuote quote{"SR3H26", ql::Date(17, ql::December, 2025),
+                                     ql::Date(18, ql::March, 2026), 95.70};
+    const double expected = -std::log1p((91.0 / 360.0) * 0.043);
+    EXPECT_NEAR(irc::sofr_future_log_forward_discount(quote), expected, 1e-15);
+
+    auto invalid = quote;
+    invalid.price = std::numeric_limits<double>::infinity();
+    EXPECT_THROW((void)irc::sofr_future_log_forward_discount(invalid), std::invalid_argument);
+
+    invalid = quote;
+    invalid.reference_start = ql::Date();
+    EXPECT_THROW((void)irc::sofr_future_log_forward_discount(invalid), std::invalid_argument);
+
+    invalid = quote;
+    invalid.reference_end = ql::Date();
+    EXPECT_THROW((void)irc::sofr_future_log_forward_discount(invalid), std::invalid_argument);
+
+    invalid = quote;
+    invalid.reference_end = invalid.reference_start;
+    EXPECT_THROW((void)irc::sofr_future_log_forward_discount(invalid), std::invalid_argument);
+
+    invalid = quote;
+    invalid.price = 500.0;
+    EXPECT_THROW((void)irc::sofr_future_log_forward_discount(invalid), std::invalid_argument);
+}
+
+TEST(CurveInstrumentTest, FuturesModelRateInvertsForwardDiscountAndRejectsBadLevels) {
+    const irc::SofrFutureQuote quote{"SR3H26", ql::Date(17, ql::December, 2025),
+                                     ql::Date(18, ql::March, 2026), 95.70};
+    const double end_discount = std::exp(irc::sofr_future_log_forward_discount(quote));
+    EXPECT_NEAR(irc::sofr_future_model_rate(quote, 1.0, end_discount), 0.043, 1e-14);
+    EXPECT_NEAR(irc::sofr_future_model_rate(quote, 1.00045281574074, 0.989695376825414), 0.043,
+                1e-11);
+
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    const double inf = std::numeric_limits<double>::infinity();
+    EXPECT_THROW((void)irc::sofr_future_model_rate(quote, 0.0, end_discount),
+                 std::invalid_argument);
+    EXPECT_THROW((void)irc::sofr_future_model_rate(quote, -1.0, end_discount),
+                 std::invalid_argument);
+    EXPECT_THROW((void)irc::sofr_future_model_rate(quote, nan, end_discount),
+                 std::invalid_argument);
+    EXPECT_THROW((void)irc::sofr_future_model_rate(quote, 1.0, 0.0), std::invalid_argument);
+    EXPECT_THROW((void)irc::sofr_future_model_rate(quote, 1.0, -1.0), std::invalid_argument);
+    EXPECT_THROW((void)irc::sofr_future_model_rate(quote, 1.0, inf), std::invalid_argument);
+
+    auto invalid_date = quote;
+    invalid_date.reference_start = ql::Date();
+    EXPECT_THROW((void)irc::sofr_future_model_rate(invalid_date, 1.0, end_discount),
+                 std::invalid_argument);
+}
+
 TEST(MarketDataIoTest, LoadsPinnedSnapshotAndRejectsMalformedCopies) {
     const auto market = load_pinned_market();
     EXPECT_EQ(market.futures.size(), 13);
@@ -637,6 +690,17 @@ TEST(SofrBootstrapperTest, FullCurveRepricesAllInputsAndPreservesSnapshot) {
     }
 }
 
+TEST(SofrBootstrapperTest, ExpandsTheOisBracketOnceWhenRequired) {
+    auto market = load_pinned_market();
+    market.futures.front().price = 300.0;
+
+    const auto result = irc::SofrCurveBootstrapper().bootstrap(market);
+    EXPECT_TRUE(std::any_of(result.diagnostics.begin(), result.diagnostics.end(),
+                            [](const irc::CalibrationDiagnostic& diagnostic) {
+                                return diagnostic.used_expanded_bracket;
+                            }));
+}
+
 TEST(SofrBootstrapperTest, RejectsInvalidMarketsWithContext) {
     const auto pinned = load_pinned_market();
     const irc::SofrCurveBootstrapper bootstrapper;
@@ -670,12 +734,22 @@ TEST(SofrBootstrapperTest, RejectsInvalidMarketsWithContext) {
     EXPECT_THROW((void)bootstrapper.bootstrap(non_finite), std::invalid_argument);
 
     auto impossible_future = pinned;
-    impossible_future.futures.front().price = 300.0;
+    impossible_future.futures.front().price = 500.0;
     EXPECT_THROW((void)bootstrapper.bootstrap(impossible_future), std::invalid_argument);
 
     auto pathological = pinned;
     pathological.ois.back().par_rate = 5.0;
-    EXPECT_THROW((void)bootstrapper.bootstrap(pathological), std::runtime_error);
+    try {
+        (void)bootstrapper.bootstrap(pathological);
+        FAIL() << "expected the pathological OIS quote to exhaust both brackets";
+    } catch (const std::runtime_error& error) {
+        const std::string message = error.what();
+        EXPECT_NE(message.find(pathological.ois.back().id), std::string::npos);
+        EXPECT_NE(message.find("initial_forward_rate=[-0.10, 0.50]"), std::string::npos);
+        EXPECT_NE(message.find("expanded_forward_rate=[-0.50, 1.00]"), std::string::npos);
+        EXPECT_NE(message.find("initial_residuals="), std::string::npos);
+        EXPECT_NE(message.find("expanded_residuals="), std::string::npos);
+    }
 }
 
 // --- E. Deterministic output ------------------------------------------------

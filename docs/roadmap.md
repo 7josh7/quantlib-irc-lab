@@ -145,10 +145,12 @@ fixture, then compute quote DV01 by complete bump-and-rebootstrap.
 tolerances, discount factors are valid and positive, outputs are deterministic,
 and curve, PV, and DV01 results agree with the QuantLib benchmark.
 
-**Current gate:** the approved headers, validation-only stubs, pinned fixtures,
-and red tests are materialized. The MSVC Release build succeeds; the owner now
-implements from Phase 1 finite-input hardening through direct quote DV01, using
-the red groups in the implementation note as the executable specification.
+**Current gate:** the sequential SR3 futures/OIS bootstrap, repricing
+diagnostics, pinned fixtures, deterministic curve output, and QuantLib
+discount-factor comparison are implemented. The owner next resolves the 10Y
+payment-lag PV acceptance tolerance and then implements direct quote DV01 using
+the remaining red groups in the implementation note as the executable
+specification.
 
 **Stretch:** finite-difference calibration Jacobian and two-way DV01
 cross-check. It is sequenced after direct quote DV01 is green and does not gate

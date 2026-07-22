@@ -19,12 +19,13 @@ and quote-DV01 calculations remain intentional test-first exercises.
 |---|---|---|
 | 0 — Environment | Complete | MSVC/CMake/vcpkg build, GoogleTest wiring, and a retained QuantLib swap example |
 | 1 — Mini pricer | Complete | Flat discount curve, fixed and floating legs, SOFR-aware accrual strategies, swap NPV/fair rate, analytic tests, and a QuantLib OIS comparison; tagged `v0.2-mini-pricer` |
-| 2 — SOFR curve + quote DV01 | In progress | Solver, interpolation, piecewise log-linear curve, curve instruments, payment-lag cash flows, market-data loading, and deterministic curve serialization are implemented. `SofrCurveBootstrapper` and the DV01 calculations are still validation-only stubs |
+| 2 — SOFR curve + quote DV01 | In progress | Solver, interpolation, piecewise log-linear curve, curve instruments, payment-lag cash flows, market-data loading, deterministic serialization, and the sequential futures/OIS bootstrap are implemented. Direct quote DV01 remains a validation-only stub |
 | 3 — Portfolio risk report | Planned | No Phase 3 executable or generated portfolio reports exist yet |
 
 The current checkout therefore contains an intentionally red portion of the
-test suite. Those tests specify the unfinished bootstrap and risk work; they
-are not being presented as passing functionality. The last complete green
+test suite. Those tests specify unfinished risk work plus one pending
+QuantLib PV-tolerance decision; they are not being presented as passing
+functionality. The last complete green
 milestone is `v0.2-mini-pricer`.
 
 The full execution plan, including what is MVP scope versus later research, is
@@ -42,11 +43,13 @@ in [docs/roadmap.md](docs/roadmap.md).
   piecewise log-linear discount curve.
 - Parsing and validation of a pinned SOFR fixture, including realized
   calendar-day-weighted overnight accumulation.
+- Sequential SR3 futures and payment-lag SOFR OIS bootstrapping with repricing
+  diagnostics and a bounded two-stage root bracket.
 - Deterministic curve CSV formatting and explicit failures for malformed or
   non-finite input.
 - Analytic sanity checks and a green QuantLib OIS comparison for the mini
-  pricer. Curve-level QuantLib comparisons are already specified in the red
-  Phase 2 tests.
+  pricer. The Phase 2 curve agrees with QuantLib at pillars and off-pillar
+  dates; the 10Y payment-lag PV acceptance tolerance remains to be finalized.
 
 The Phase 2 fixture is deliberately hybrid: the historical SOFR fixings are
 real final observations, while the SR3 futures and OIS quotes are synthetic and

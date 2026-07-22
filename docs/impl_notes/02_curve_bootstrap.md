@@ -7,6 +7,50 @@
 > under [AGENTS.md](../../AGENTS.md) workflow step 2.
 > Per step 4, the owner implements; AI writes the red tests and stubs.
 >
+> Revision 15 — OIS bracket execution (2026-07-22): records the implemented
+> two-stage solve required by §1. The bootstrapper evaluates and retains each
+> pair of endpoint residuals before invoking the finance-independent solver,
+> accepts an endpoint within the solver's rate tolerance, tries the initial
+> forward-rate bracket $[-10\%,+50\%]$ before the single expanded bracket
+> $[-50\%,+100\%]$, and records expansion in `CalibrationDiagnostic`. Failure
+> after both attempts names the OIS instrument and reports both node brackets
+> and all endpoint residuals. The group D regression uses a valid IMM price
+> above 100 to exercise successful expansion and price 500.0 to exercise the
+> separate $1+\tau R\leq0$ input rejection.
+>
+> Revision 14 — futures model rate (2026-07-22): adds
+> `sofr_future_model_rate(quote, start_value, end_discount)` to
+> `src/curves/curve_instruments.hpp`, the inverse used by
+> `model_quotes`. It takes levels, not logs: the curve exposes `discount()`,
+> so a log-space signature would force logs of values near 1 and lose the
+> precision `expm1` would otherwise recover — the symmetry would be cosmetic.
+> Its value is owning the math note's positivity conditions ($\tau>0$,
+> start and end values finite and positive), which had no home, and enabling
+> the round-trip check in test 16b, which fails on a sign error in either
+> direction without needing a curve or a fixture.
+>
+> Revision 13 — architecture diagram corrected (2026-07-22): §2 records the
+> `curves → rates` edge that OIS calibration requires. The diagram predated
+> revision 8, which added the payment-lag-capable legs precisely so
+> $K_{\mathrm{model},m}$ could be read from `VanillaSwap::fair_rate` rather
+> than restated inside `curves`. No cycle is introduced — `rates` names only
+> `core/yield_curve.hpp` — and the futures section still touches no `rates`
+> type. Also records the OIS pillar as the last *payment* date, delay
+> included, not the maturity date.
+>
+> Revision 12 — futures log forward discount (2026-07-22): adds
+> `sofr_future_log_forward_discount(const SofrFutureQuote&)` to
+> `src/curves/curve_instruments.hpp`. The identity $P(0;T_s,T_e) =
+> 1/(1+\tau R)$ and its positivity precondition were previously restated at
+> every call site — the loader's per-row validation and each hand-computed
+> futures pillar — so the Act/360-over-IMM-endpoints convention was
+> re-derived four times. It returns $-\log(1+\tau R)$ rather than the level,
+> matching the curve's log-discount state so the strip telescopes by addition,
+> and enabling `log1p`. `model_quotes` inverts it through the level-based
+> `sofr_future_model_rate` helper described by revision 14. Test 16a
+> verifies the function directly; the group D bootstrap tests keep their
+> inline arithmetic on purpose.
+>
 > Revision 11 — serializer test strategy (2026-07-21): test 22 is split into a
 > byte-exact format check and a tolerance check on the numeric columns,
 > because `std::exp` is not required to be correctly rounded and byte
@@ -196,7 +240,9 @@ uses:
 market_data_io ------------> SofrMarketData
 SofrCurveBootstrapper -----> SofrMarketData
           |----------------> bracketed_bisection
-          `----------------> PiecewiseLogLinearCurve
+          |----------------> PiecewiseLogLinearCurve
+          `----------------> rates: CouponPeriod, FixedLeg, FloatingLeg,
+                             CompoundedOvernightRate, VanillaSwap  (OIS only)
 PiecewiseLogLinearCurve ---> LinearFlatInterpolator
 curve_io ------------------> PiecewiseLogLinearCurve
 risk/dv01 -----------------> SofrCurveBootstrapper
@@ -205,6 +251,12 @@ risk/dv01 -----------------> SofrCurveBootstrapper
 
 The runtime data flow remains: quote and fixing CSVs → `market_data_io` →
 `SofrMarketData` → `SofrCurveBootstrapper` → `BootstrapResult`.
+
+The `curves → rates` edge is used by the OIS section only, and it is the sole
+reason §2a made the legs payment-lag capable. It introduces no cycle: `rates`
+depends on `core/yield_curve.hpp` alone and never names a concrete curve, so
+the direction is strictly `core ← rates ← curves ← risk`. The futures section
+uses no `rates` type — its pillars are closed-form.
 
 Approved decisions:
 
@@ -215,6 +267,14 @@ Approved decisions:
   curve would drag futures/OIS conventions, fixings, root solvers, and quote
   validation into a numerical term structure — and make it impossible to
   construct a curve from known nodes in unit tests.
+- **$K_{\mathrm{model},m}$ is not reimplemented.** It equals
+  `VanillaSwap::fair_rate(candidate)`, whose `float_pv / annuity` is the math
+  note's $\sum_i P(0,U_i)\tau_i F_i \big/ \sum_j \alpha_j P(0,V_j)$ with the
+  notional cancelled. The bootstrapper builds the OIS instrument — spot,
+  schedule, `make_coupon_periods` with the 2-day USNY lag — and reads the par
+  rate off the rates layer. Restating the ratio inside `curves` would fork the
+  payment-lag treatment that §2a exists to provide, and would diverge the
+  moment either leg's pricing changed.
 - **Realized accumulation lives in the bootstrapper layer, not the curve.**
   $A^{\mathrm{SOFR}}$ is computed from the fixings input and multiplies
   externally (math note: $P(0,T_{e,1}) = P(0;T_{s,1},T_{e,1})\,A$); the curve
@@ -586,6 +646,35 @@ struct SofrFixing {
 double sofr_future_rate_from_price(double price);
 double sofr_future_price_from_rate(double rate);
 
+// Log forward discount implied by one futures quote:
+//   log P(0; T_s, T_e) = -log1p(tau * R),
+//   tau = Act/360(reference_start, reference_end),
+//   R   = sofr_future_rate_from_price(price).
+// Returns the log, not the level, because the curve stores log discounts and
+// the futures strip therefore telescopes by addition:
+//   x_1 = log A + this(futures[0]),  x_m = x_{m-1} + this(futures[m-1]).
+// log1p is the accurate spelling: tau*R is ~0.011 for a quarterly contract,
+// which log(1 + tau*R) resolves ~30 ulp worse than log1p(tau*R).
+// Act/360 over the unadjusted IMM endpoints is the contract accrual
+// convention, so it is fixed here rather than passed in; the curve's own
+// Act/365F day counter plays no part.
+// Throws std::invalid_argument on a non-finite quote or date, on a
+// non-positive accrual, or when 1 + tau * R is non-finite or non-positive.
+double sofr_future_log_forward_discount(const SofrFutureQuote& quote);
+
+// Its inverse, in the units a caller reading a curve actually holds:
+//   R = (start_value / end_discount - 1) / tau,  same tau as above.
+// start_value is the multiplier the bootstrap applied — A^SOFR for the
+// partially accrued contract, P(0,T_s) otherwise — and end_discount is
+// P(0,T_e). Levels rather than logs on purpose: PiecewiseLogLinearCurve
+// exposes discount(), so a log-space signature would force the caller to take
+// logs of values near 1 and lose exactly the precision expm1 would recover.
+// Carries the math note's §Repricing Diagnostics positivity conditions:
+// throws std::invalid_argument unless tau > 0 and both values are finite and
+// strictly positive.
+double sofr_future_model_rate(const SofrFutureQuote& quote, double start_value,
+                              double end_discount);
+
 // Realized SOFR accumulation factor A^SOFR(start, end_exclusive):
 //   prod_k (1 + r_k * delta_k),  delta_k = calendar days covered / 360,
 // where fixing k covers [rate_date_k, next business rate date) clipped to
@@ -613,8 +702,38 @@ struct SofrMarketData {
 ```
 
 The conversion functions throw `std::invalid_argument` for non-finite
-inputs. They perform only the unit conversion; the bootstrapper validates
-the contract-specific positivity condition $1+\tau_m R_{\mathrm{fut},m}>0$.
+inputs. They perform only the unit conversion.
+
+`sofr_future_log_forward_discount` owns the contract-specific positivity
+condition $1+\tau_m R_{\mathrm{fut},m}>0$, which was previously restated at
+every site that needed it — the loader's per-row check and each hand
+computation of a futures pillar. Centralizing it also fixes the convention
+in one place: reading Act/360 off the unadjusted IMM endpoints, and reading
+the rate through `sofr_future_rate_from_price`. The bootstrapper and the
+loader both call it rather than re-deriving the accrual factor; the loader
+discards the result and keeps it only for its throwing behavior, as it
+already does with `realized_accumulation`.
+
+**It returns the log, not the level.** The curve state is
+$x_m = \log P(0,L_m)$, so the futures strip telescopes by *addition* —
+$x_m = x_{m-1} + \log P(0;T_{s,m},T_{e,m})$ — and a level-returning function
+would force the bootstrapper to take the log straight back. The same choice
+makes `log1p` available, which matters because $\tau R \approx 0.011$ for a
+quarterly contract: `log(1 + tau*R)` loses roughly 30 ulp against
+`log1p(tau*R)`, and 4.2e-16 accumulated over the 13-contract strip. That is
+comfortably inside the $10^{-12}$ pillar tolerance, so this is accuracy taken
+for free rather than a defect repaired.
+
+`model_quotes` inverts the same identity and should use the mirrored
+primitive:
+$R_m = \operatorname{expm1}(x_{m-1} - x_m)/\tau_m$, with
+$x_0 \to \log A$ for the partially accrued contract.
+
+The tests deliberately do **not** call it. Group D restates
+$M/(1+\tau R)$ inline with its own literals, so those tests verify the
+formula rather than verifying that two call sites agree; a sign error inside
+the function would otherwise pass. The function is verified directly and
+once, by test 16a.
 
 ### `src/curves/market_data_io.hpp` — pinned-file loaders
 
@@ -721,7 +840,14 @@ struct BootstrapResult {
 //     T_s equals the previous pillar because the strip is contiguous;
 //  4. OIS: for each quote solve eps_m(x_m) = K_model,m(x_m) - S_m = 0 by
 //     bracketed bisection (bracket rule in impl note §1), earlier nodes
-//     frozen.
+//     frozen. K_model,m is VanillaSwap::fair_rate(candidate) on the trial
+//     curve; the bootstrapper builds the instrument (USNY spot + tenor,
+//     annual schedule, make_coupon_periods with the 2-day USNY payment lag,
+//     CompoundedOvernightRate on the USGS calendar) and does not restate the
+//     par-rate ratio. The pillar is periods.back().payment_date -- the last
+//     payment date including the lag, not the maturity date -- so the final
+//     cash flow lands on the last node instead of past it, where the curve
+//     rejects the query.
 // Validation (throws std::invalid_argument, naming the stable instrument ID
 // or rate date):
 //   empty future strip; malformed/duplicate IDs; null or non-business
@@ -1016,6 +1142,30 @@ rates layer.
 
 16. Quote conversion: price 95.75 ↔ rate 0.0425 round-trips; an upward 1bp
     rate move maps to a −0.01 IMM price move.
+16a. `sofr_future_log_forward_discount` verified **directly**, against its own
+    literals rather than through a bootstrap. A quote over
+    $[2025\text{-}12\text{-}17,\ 2026\text{-}03\text{-}18)$ — 91 calendar
+    days, so $\tau = 91/360$ — priced 95.70 gives $R = 0.0430$ and
+    $\log P(0;T_s,T_e) = -\log(1+\tau R) = -0.010810796629895461$ within
+    $10^{-15}$. The expected value is the `log1p` form; computing it as
+    $\log(1/(1+\tau R))$ instead lands 30 ulp away, which this tolerance
+    still admits, so the assertion checks the identity rather than policing
+    the spelling. Rejects with `std::invalid_argument`: a non-finite price; a
+    null date; `reference_end <= reference_start` (non-positive accrual); and
+    a price implying $1+\tau R \le 0$ (with $\tau = 91/360$ that needs price
+    $\ge 495.60$, so 500.0 is the fixture). This is the only test that calls
+    the function — group D restates $M/(1+\tau R)$ inline so the bootstrap is
+    never checked against the same helper it uses.
+16b. `sofr_future_model_rate` round-trips its forward counterpart on the same
+    quote: `sofr_future_model_rate(q, 1.0, exp(sofr_future_log_forward_discount(q)))`
+    recovers $R = 0.0430$ to $10^{-14}$. Needs no curve, fixture, or
+    bootstrap, and a sign error in *either* direction fails it. A second case
+    uses the §3 stub form with the test 18 constants — $A = 1.00045281574074$,
+    $P(0,T_e) = 0.989695376825414$ — recovering $0.0430$ to $10^{-11}$; the
+    looser tolerance is honest, since those two literals are themselves
+    rounded to 15 digits and the division by $\tau$ amplifies their residue.
+    Rejects with `std::invalid_argument`: non-finite or non-positive
+    `start_value` or `end_discount`, and `reference_end <= reference_start`.
 17. Loader round-trip: pinned files → 13 futures + 9 OIS + 19 fixings +
     `MarketAsOf{2026-01-15, 2026-01-15T20:00:00Z}`. The loader rejects a
     missing, malformed, or non-UTC timestamp and malformed copies with bad
@@ -1211,7 +1361,7 @@ remaining order is:
    tests green and 34 implementation tests intentionally red.
 2. **Current — owner implements.** Each component's red tests must exist
    before its implementation. Progress against the suggested order, as of
-   2026-07-22 (53 tests discovered, 40 green, 13 intentionally red):
+   2026-07-22 (56 tests discovered, 48 green, 8 intentionally red):
 
    - ✅ Phase 1 finite-input hardening
    - ✅ bracketed bisection
@@ -1221,15 +1371,21 @@ remaining order is:
    - ✅ loader (`market_data_io`)
    - ✅ the approved `CouponPeriod` and payment-lag-capable legs from §2a
    - ✅ deterministic output (`curve_io`)
-   - ⬜ **`SofrCurveBootstrapper`** — futures leg including SR3Z25, then OIS
-     pricing. Clears the 4 `SofrBootstrapperTest` and 2
-     `QuantLibCurveOracleTest` failures.
-   - ⬜ direct DV01 (`risk/dv01`), green through group G. Clears the
-     remaining 5 `QuoteDv01Test` and 2 `JacobianDv01Test` failures; depends
-     on the bootstrapper, since every bump triggers a full re-bootstrap.
+   - ✅ **`SofrCurveBootstrapper`** — futures including SR3Z25, sequential OIS
+     solves, repricing diagnostics, and the two-stage bracket are implemented;
+     all 5 `SofrBootstrapperTest` cases and the QuantLib pillar/off-pillar
+     comparison are green.
+   - ⬜ resolve the 10Y payment-lag swap PV acceptance tolerance. The par-rate
+     oracle is green; the current absolute PV assertion misses by
+     `5.0316448323428631e-06` currency units and requires the owner-approved
+     combined absolute/relative tolerance before it can be changed.
+   - ⬜ direct DV01 (`risk/dv01`), green through group G. Clears the remaining
+     5 `QuoteDv01Test` failures; depends on the bootstrapper, since every bump
+     triggers a full re-bootstrap.
 3. AI reviews the green implementation, then shows its own diff.
-4. **Stretch:** owner implements the Jacobian path (group H), with the now-
-   trusted direct DV01 as its reference.
+4. **Stretch:** owner implements the Jacobian path (group H), clearing the 2
+   remaining `JacobianDv01Test` failures with the now-trusted direct DV01 as
+   its reference.
 5. AI runs the QuantLib comparison and reports diffs.
 6. Owner commits on `phase-2-curves`; tag `v0.3-curve-dv01` when G is green
    (H is not gating).

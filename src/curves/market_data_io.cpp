@@ -1,7 +1,6 @@
 #include "curves/market_data_io.hpp"
 
 #include <ql/time/calendars/unitedstates.hpp>
-#include <ql/time/daycounters/actual360.hpp>
 #include <ql/time/imm.hpp>
 #include <ql/utilities/dataparsers.hpp>
 
@@ -352,16 +351,14 @@ SofrMarketData load_sofr_market_data(const std::filesystem::path& quotes_csv,
                      "future reference periods must be contiguous and non-overlapping");
             }
 
-            const double accrual = QuantLib::Actual360().yearFraction(start, end);
-            const double rate = sofr_future_rate_from_price(price);
-            const double denominator = 1.0 + accrual * rate;
-            if (!(accrual > 0.0) || !std::isfinite(accrual) || !std::isfinite(denominator) ||
-                denominator <= 0.0) {
-                fail(quotes_csv, row.line_number,
-                     "future quote violates the positive accrual-factor condition");
+            const SofrFutureQuote quote{row.fields[kId], start, end, price};
+            try {
+                (void)sofr_future_log_forward_discount(quote);
+            } catch (const std::invalid_argument& error) {
+                fail(quotes_csv, row.line_number, error.what());
             }
 
-            market.futures.push_back({row.fields[kId], start, end, price});
+            market.futures.push_back(quote);
             previous_future_end = end;
             continue;
         }

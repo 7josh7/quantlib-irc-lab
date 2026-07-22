@@ -38,6 +38,10 @@ struct SofrFixing {
 double sofr_future_rate_from_price(double price);
 double sofr_future_price_from_rate(double rate);
 
+double sofr_future_log_forward_discount(const SofrFutureQuote& quote);
+double sofr_future_model_rate(const SofrFutureQuote& quote, double start_value,
+                              double end_discount);
+
 double realized_accumulation(const std::vector<SofrFixing>& fixings, const QuantLib::Date& start,
                              const QuantLib::Date& end_exclusive,
                              const QuantLib::Calendar& fixing_calendar);

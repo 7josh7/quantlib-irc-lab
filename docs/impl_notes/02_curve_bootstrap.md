@@ -1412,8 +1412,9 @@ workflow status:
 3. **Final review complete (2026-07-22).** Actionable findings are closed, the
    clean Release suite and both examples have been rerun, and release
    documentation is current.
-4. **Current — milestone closeout.** Push the reviewed commit and tag
-   `v0.3-curve-dv01` (group H is complete but remains non-gating).
+4. **Milestone complete (2026-07-22).** The reviewed commit is published,
+   tagged `v0.3-curve-dv01`, and merged to `main` through PR #2 (group H is
+   complete but remains non-gating).
 
 ## 8. Deferred (tracked, not forgotten)
 

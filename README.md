@@ -11,21 +11,20 @@ learning and portfolio project, not a production pricing or risk system.
 
 ## Current state
 
-The repository is finalizing Phase 2. The simplified swap pricer, sequential
-SOFR curve bootstrap, direct quote DV01, finite-difference Jacobian
-cross-check, and both comparison examples are implemented. The Release suite
-is green; the Phase 2 milestone tag remains.
+Phase 2 is complete. The simplified swap pricer, sequential SOFR curve
+bootstrap, direct quote DV01, finite-difference Jacobian cross-check, and both
+comparison examples are implemented. The Release suite is green and the
+`v0.3-curve-dv01` milestone is published.
 
 | Phase | State | What exists |
 |---|---|---|
 | 0 — Environment | Complete | MSVC/CMake/vcpkg build, GoogleTest wiring, and a retained QuantLib swap example |
 | 1 — Mini pricer | Complete | Flat discount curve, fixed and floating legs, SOFR-aware accrual strategies, swap NPV/fair rate, analytic tests, and a QuantLib OIS comparison; tagged `v0.2-mini-pricer` |
-| 2 — SOFR curve + quote DV01 | In progress | Sequential SR3/OIS bootstrap, deterministic curve output, direct quote DV01, finite-difference Jacobian cross-check, and hand-rolled/QuantLib examples; 59/59 tests green |
+| 2 — SOFR curve + quote DV01 | Complete | Sequential SR3/OIS bootstrap, deterministic curve output, direct quote DV01, finite-difference Jacobian cross-check, and hand-rolled/QuantLib examples; 59/59 tests green; tagged `v0.3-curve-dv01` |
 | 3 — Portfolio risk report | Planned | No Phase 3 executable or generated portfolio reports exist yet |
 
-The current checkout has 59/59 tests green. The last tagged milestone remains
-`v0.2-mini-pricer`; Phase 2 remains in progress until the
-`v0.3-curve-dv01` tag is pushed.
+The current checkout has 59/59 tests green. The latest tagged milestone is
+`v0.3-curve-dv01`; Phase 3 portfolio risk reporting is next.
 
 The full execution plan, including what is MVP scope versus later research, is
 in [docs/roadmap.md](docs/roadmap.md).

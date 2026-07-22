@@ -145,11 +145,12 @@ fixture, then compute quote DV01 by complete bump-and-rebootstrap.
 tolerances, discount factors are valid and positive, outputs are deterministic,
 and curve, PV, and DV01 results agree with the QuantLib benchmark.
 
-**Current gate:** the sequential SR3 futures/OIS bootstrap, repricing
+**Milestone complete:** the sequential SR3 futures/OIS bootstrap, repricing
 diagnostics, deterministic curve output, direct quote DV01, finite-difference
 Jacobian cross-check, QuantLib comparison, and both Phase 2 examples are
 implemented; 59/59 tests are green, and both examples reproduce successfully.
-The phase remains open until the `v0.3-curve-dv01` tag is pushed.
+The reviewed implementation is merged to `main` and tagged
+`v0.3-curve-dv01`.
 
 **Stretch complete:** the finite-difference calibration Jacobian and two-way
 DV01 cross-check are green. This work remains non-gating for

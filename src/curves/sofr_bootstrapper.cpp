@@ -5,6 +5,7 @@
 #include "rates/rate_accrual.hpp"
 #include "rates/vanilla_swap.hpp"
 
+#include <ql/errors.hpp>
 #include <ql/time/calendars/unitedstates.hpp>
 #include <ql/time/daycounters/actual360.hpp>
 #include <ql/time/daycounters/actual365fixed.hpp>
@@ -16,9 +17,11 @@
 #include <iomanip>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace irc {
@@ -38,6 +41,7 @@ constexpr double kCalibrationTolerance = 1e-10;
 void validate_market(const SofrMarketData& market) {
     const QuantLib::Calendar settlement_calendar{
         QuantLib::UnitedStates(QuantLib::UnitedStates::Settlement)};
+    const QuantLib::Calendar fixing_calendar{QuantLib::UnitedStates(QuantLib::UnitedStates::SOFR)};
 
     if (market.futures.empty()) {
         throw std::invalid_argument("SofrCurveBootstrapper: futures strip must not be empty");
@@ -49,8 +53,16 @@ void validate_market(const SofrMarketData& market) {
             "day");
     }
 
+    std::unordered_set<std::string> instrument_ids;
     for (std::size_t i = 0; i < market.futures.size(); ++i) {
         const SofrFutureQuote& future = market.futures[i];
+        if (future.id.empty()) {
+            throw std::invalid_argument("SofrCurveBootstrapper: instrument ID must not be empty");
+        }
+        if (!instrument_ids.insert(future.id).second) {
+            throw std::invalid_argument("SofrCurveBootstrapper: duplicate instrument ID '" +
+                                        future.id + "'");
+        }
         if (!std::isfinite(future.price)) {
             throw std::invalid_argument("SofrCurveBootstrapper: non-finite price for future '" +
                                         future.id + "'");
@@ -78,18 +90,73 @@ void validate_market(const SofrMarketData& market) {
                                     "' has already settled on the valuation date");
     }
 
+    std::optional<QuantLib::Period> previous_ois_tenor;
     for (const OisQuote& ois : market.ois) {
+        if (ois.id.empty()) {
+            throw std::invalid_argument("SofrCurveBootstrapper: instrument ID must not be empty");
+        }
+        if (!instrument_ids.insert(ois.id).second) {
+            throw std::invalid_argument("SofrCurveBootstrapper: duplicate instrument ID '" +
+                                        ois.id + "'");
+        }
+        if (ois.tenor.length() <= 0) {
+            throw std::invalid_argument("SofrCurveBootstrapper: OIS '" + ois.id +
+                                        "' tenor must be positive");
+        }
+        if (previous_ois_tenor.has_value()) {
+            bool increasing = false;
+            try {
+                increasing = *previous_ois_tenor < ois.tenor;
+            } catch (const QuantLib::Error& error) {
+                throw std::invalid_argument("SofrCurveBootstrapper: OIS '" + ois.id +
+                                            "' tenor cannot be ordered after the preceding "
+                                            "tenor: " +
+                                            error.what());
+            }
+            if (!increasing) {
+                throw std::invalid_argument(
+                    "SofrCurveBootstrapper: OIS tenors must be unique and strictly increasing; "
+                    "offending instrument '" +
+                    ois.id + "'");
+            }
+        }
         if (!std::isfinite(ois.par_rate)) {
             throw std::invalid_argument("SofrCurveBootstrapper: non-finite par rate for OIS '" +
                                         ois.id + "'");
         }
+        previous_ois_tenor = ois.tenor;
     }
+
+    std::optional<QuantLib::Date> previous_fixing_date;
     for (const SofrFixing& fixing : market.fixings) {
+        if (fixing.rate_date == QuantLib::Date()) {
+            throw std::invalid_argument("SofrCurveBootstrapper: SOFR fixing date must not be null");
+        }
+        if (!fixing_calendar.isBusinessDay(fixing.rate_date)) {
+            std::ostringstream message;
+            message << "SofrCurveBootstrapper: SOFR fixing date " << fixing.rate_date
+                    << " is not a UnitedStates(SOFR) business day";
+            throw std::invalid_argument(message.str());
+        }
+        if (fixing.rate_date >= market.as_of.valuation_date) {
+            std::ostringstream message;
+            message << "SofrCurveBootstrapper: SOFR fixing date " << fixing.rate_date
+                    << " must precede valuation_date " << market.as_of.valuation_date;
+            throw std::invalid_argument(message.str());
+        }
+        if (previous_fixing_date.has_value() && fixing.rate_date <= *previous_fixing_date) {
+            std::ostringstream message;
+            message << "SofrCurveBootstrapper: SOFR fixing dates must be strictly increasing; "
+                       "offending rate date "
+                    << fixing.rate_date;
+            throw std::invalid_argument(message.str());
+        }
         if (!std::isfinite(fixing.rate)) {
             std::ostringstream message;
             message << "SofrCurveBootstrapper: non-finite SOFR fixing on " << fixing.rate_date;
             throw std::invalid_argument(message.str());
         }
+        previous_fixing_date = fixing.rate_date;
     }
 }
 
@@ -104,8 +171,22 @@ double first_pillar_log_multiplier(const SofrMarketData& market) {
         return 0.0;  // nothing realized; §3 allows fully-forward input with empty fixings
     }
     const QuantLib::Calendar fixing_calendar{QuantLib::UnitedStates(QuantLib::UnitedStates::SOFR)};
-    return std::log(realized_accumulation(market.fixings, first.reference_start,
-                                          market.as_of.valuation_date, fixing_calendar));
+    double accumulation = 0.0;
+    try {
+        accumulation = realized_accumulation(market.fixings, first.reference_start,
+                                             market.as_of.valuation_date, fixing_calendar);
+    } catch (const std::invalid_argument& error) {
+        throw std::invalid_argument("SofrCurveBootstrapper: future '" + first.id +
+                                    "' realized fixing window is invalid: " + error.what());
+    } catch (const std::runtime_error& error) {
+        throw std::invalid_argument("SofrCurveBootstrapper: future '" + first.id +
+                                    "' realized fixing window is invalid: " + error.what());
+    }
+    if (!std::isfinite(accumulation) || !(accumulation > 0.0)) {
+        throw std::invalid_argument("SofrCurveBootstrapper: future '" + first.id +
+                                    "' realized accumulation must be finite and positive");
+    }
+    return std::log(accumulation);
 }
 struct SofrOisConventions {
     QuantLib::Integer spot_lag_days = 2;
@@ -270,21 +351,18 @@ std::vector<double> SofrCurveBootstrapper::model_quotes(
     const SofrMarketData& market, const PiecewiseLogLinearCurve& curve) const {
     std::vector<double> result;
     result.reserve(market.futures.size() + market.ois.size());
-    for (int i = 0; i < market.futures.size(); ++i) {
+    for (std::size_t i = 0; i < market.futures.size(); ++i) {
         const double M = i == 0 ? std::exp(first_pillar_log_multiplier(market))
                                 : curve.discount(market.futures[i].reference_start);
-        ;
         result.push_back(sofr_future_model_rate(market.futures[i], M,
                                                 curve.discount(market.futures[i].reference_end)));
     }
     SofrOisConventions conventions;
-    const QuantLib::DayCounter curve_day_counter = QuantLib::Actual365Fixed();
     const auto overnight_accrual =
         std::make_shared<const CompoundedOvernightRate>(conventions.fixing_calendar);
     for (const OisQuote& ois : market.ois) {
         const std::vector<CouponPeriod> periods =
             ois_coupon_periods(ois, market.as_of, conventions);
-        const QuantLib::Date pillar_date = periods.back().payment_date;  // not maturity
         const VanillaSwap swap(SwapSide::Payer, FixedLeg(periods, 1.0, ois.par_rate),
                                FloatingLeg(periods, 1.0, overnight_accrual));
         result.push_back(swap.fair_rate(curve));

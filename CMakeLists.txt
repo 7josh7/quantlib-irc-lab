@@ -54,6 +54,14 @@ add_library(irc_pricing STATIC
 target_include_directories(irc_pricing PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(irc_pricing PUBLIC QuantLib::QuantLib)
 
+add_executable(02_sofr_curve_bootstrap examples/02_sofr_curve_bootstrap.cpp)
+target_link_libraries(02_sofr_curve_bootstrap PRIVATE irc_pricing)
+
+add_executable(02_quantlib_sofr_curve_bootstrap
+  examples/02_quantlib_sofr_curve_bootstrap.cpp)
+target_link_libraries(02_quantlib_sofr_curve_bootstrap PRIVATE
+  irc_pricing QuantLib::QuantLib)
+
 enable_testing()
 
 add_executable(irc_smoke_tests tests/test_smoke.cpp)

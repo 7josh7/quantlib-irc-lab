@@ -44,9 +44,9 @@ std::vector<double> quote_dv01_direct(const SofrMarketData& market,
                                       const CurvePricer& pv, double quote_half_width) {
     validate_half_width(quote_half_width, "quote_dv01_direct");
     validate_pricer(pv, "quote_dv01_direct");
-    SofrMarketData bumped = market; 
+    SofrMarketData bumped = market;
     std::vector<double> result;
-    result.reserve(bumped.futures.size() + bumped.ois.size());    
+    result.reserve(bumped.futures.size() + bumped.ois.size());
     for (std::size_t i = 0; i < bumped.futures.size(); ++i) {
         const double price = bumped.futures[i].price;
         bumped.futures[i].price = price - 100.0 * quote_half_width;
@@ -75,8 +75,15 @@ std::vector<std::vector<double>> calibration_jacobian(const SofrMarketData& mark
                                                       double node_half_width) {
     validate_half_width(node_half_width, "calibration_jacobian");
     // The curve constructor rejects empty pillars and always prepends the anchor,
-    // so nodes().size() >= 2 and m >= 1 — this subtraction cannot underflow.
+    // so nodes().size() >= 2 and m >= 1 - this subtraction cannot underflow.
     const std::size_t m = curve.nodes().size() - 1;
+    const std::size_t instrument_count = market.futures.size() + market.ois.size();
+    if (instrument_count != m) {
+        throw std::invalid_argument("calibration_jacobian: calibration instrument count (" +
+                                    std::to_string(instrument_count) +
+                                    ") does not match curve pillar count (" + std::to_string(m) +
+                                    ")");
+    }
     std::vector<std::vector<double>> jacobian(m, std::vector<double>(m, 0.0));
 
     for (std::size_t n = 1; n <= m; ++n) {
@@ -84,6 +91,10 @@ std::vector<std::vector<double>> calibration_jacobian(const SofrMarketData& mark
             bootstrapper.model_quotes(market, bump_node(curve, n, node_half_width));
         const std::vector<double> down =
             bootstrapper.model_quotes(market, bump_node(curve, n, -node_half_width));
+        if (up.size() != m || down.size() != m) {
+            throw std::runtime_error(
+                "calibration_jacobian: model quote count changed during finite differencing");
+        }
         for (std::size_t row = 0; row < m; ++row) {
             jacobian[row][n - 1] = (up[row] - down[row]) / (2.0 * node_half_width);
         }

@@ -146,14 +146,13 @@ tolerances, discount factors are valid and positive, outputs are deterministic,
 and curve, PV, and DV01 results agree with the QuantLib benchmark.
 
 **Current gate:** the sequential SR3 futures/OIS bootstrap, repricing
-diagnostics, pinned fixtures, deterministic curve output, and QuantLib
-discount-factor comparison are implemented. The owner next resolves the 10Y
-payment-lag PV acceptance tolerance and then implements direct quote DV01 using
-the remaining red groups in the implementation note as the executable
-specification.
+diagnostics, deterministic curve output, direct quote DV01, finite-difference
+Jacobian cross-check, QuantLib comparison, and both Phase 2 examples are
+implemented; 59/59 tests are green, and both examples reproduce successfully.
+The phase remains open until the `v0.3-curve-dv01` tag is pushed.
 
-**Stretch:** finite-difference calibration Jacobian and two-way DV01
-cross-check. It is sequenced after direct quote DV01 is green and does not gate
+**Stretch complete:** the finite-difference calibration Jacobian and two-way
+DV01 cross-check are green. This work remains non-gating for
 `v0.3-curve-dv01`.
 
 **Deferred:** analytic calibration Jacobian and futures convexity adjustment.

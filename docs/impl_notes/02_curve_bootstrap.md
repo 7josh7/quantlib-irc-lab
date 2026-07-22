@@ -815,7 +815,8 @@ must compare `valuation_date` with the **America/New_York local date** of
 `as_of_utc` under an explicit timezone policy; Phase 2 does not add a timezone-
 database dependency.
 Fixings validation (math note §Inputs): every `rate_date` is a
-`UnitedStates(SOFR)` business day in ascending order with no duplicates; rates
+`UnitedStates(SOFR)` business day strictly before `valuation_date`, in
+ascending order with no duplicates; rates
 finite; missing, duplicate, out-of-range, or non-finite records are errors and
 are never projected or silently filled. OIS spot, accrual, and payment dates
 are generated with `UnitedStates(Settlement)`; the two calendars must not be
@@ -876,7 +877,7 @@ struct BootstrapResult {
 //     rejects the query.
 // Validation (throws std::invalid_argument, naming the stable instrument ID
 // or rate date):
-//   empty future strip; malformed/duplicate IDs; null or non-business
+//   empty future strip; empty/duplicate IDs; null or non-business
 //   valuation date; non-IMM or unordered dates; non-contiguous or overlapping
 //   quarters;
 //   more than one contract straddling market.as_of.valuation_date (impossible
@@ -1379,17 +1380,17 @@ every future CTest executable must be appended when it is added.
 
 ## 7. Build order (AGENTS workflow)
 
-The math-note, interface-approval, and fixing-data gates are complete. The
-remaining order is:
+The math-note, interface-approval, and fixing-data gates are complete. Phase 2
+workflow status:
 
 1. **Completed (2026-07-17):** AI materialized the approved headers,
    validation-only stubs, `tests/test_curve_bootstrap.cpp`, the Phase 1
    finite-input regression tests, and the pinned quotes CSV. The MSVC Release
    build succeeds; 51 tests are discovered, with 17 validation/regression
    tests green and 34 implementation tests intentionally red.
-2. **Current — owner implements.** Each component's red tests must exist
-   before its implementation. Progress against the suggested order, as of
-   2026-07-22 (56 tests discovered, 48 green, 8 intentionally red):
+2. **Implementation complete (2026-07-22).** Each component's red tests existed
+   before its implementation. The Release suite discovers 59 tests and all 59
+   are green:
 
    - ✅ Phase 1 finite-input hardening
    - ✅ bracketed bisection
@@ -1401,22 +1402,18 @@ remaining order is:
    - ✅ deterministic output (`curve_io`)
    - ✅ **`SofrCurveBootstrapper`** — futures including SR3Z25, sequential OIS
      solves, repricing diagnostics, and the two-stage bracket are implemented;
-     all 5 `SofrBootstrapperTest` cases and the QuantLib pillar/off-pillar
+     all 7 `SofrBootstrapperTest` cases and the QuantLib pillar/off-pillar
      comparison are green.
-   - ⬜ resolve the 10Y payment-lag swap PV acceptance tolerance. The par-rate
-     oracle is green; the current absolute PV assertion misses by
-     `5.0316448323428631e-06` currency units and requires the owner-approved
-     combined absolute/relative tolerance before it can be changed.
-   - ⬜ direct DV01 (`risk/dv01`), green through group G. Clears the remaining
-     5 `QuoteDv01Test` failures; depends on the bootstrapper, since every bump
-     triggers a full re-bootstrap.
-3. AI reviews the green implementation, then shows its own diff.
-4. **Stretch:** owner implements the Jacobian path (group H), clearing the 2
-   remaining `JacobianDv01Test` failures with the now-trusted direct DV01 as
-   its reference.
-5. AI runs the QuantLib comparison and reports diffs.
-6. Owner commits on `phase-2-curves`; tag `v0.3-curve-dv01` when G is green
-   (H is not gating).
+   - ✅ 10Y payment-lag swap PV and par-rate QuantLib comparison
+   - ✅ direct DV01 (`risk/dv01`), green through group G
+   - ✅ finite-difference Jacobian path and two-way DV01 cross-check (group H)
+   - ✅ hand-rolled and QuantLib command-line examples; deterministic
+     `output/curve.csv` reproduced byte-for-byte
+3. **Final review complete (2026-07-22).** Actionable findings are closed, the
+   clean Release suite and both examples have been rerun, and release
+   documentation is current.
+4. **Current — milestone closeout.** Push the reviewed commit and tag
+   `v0.3-curve-dv01` (group H is complete but remains non-gating).
 
 ## 8. Deferred (tracked, not forgotten)
 

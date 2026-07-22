@@ -11,22 +11,21 @@ learning and portfolio project, not a production pricing or risk system.
 
 ## Current state
 
-The repository is partway through Phase 2. The simplified swap pricer is
-complete; the SOFR curve foundations are implemented; the sequential bootstrap
-and quote-DV01 calculations remain intentional test-first exercises.
+The repository is finalizing Phase 2. The simplified swap pricer, sequential
+SOFR curve bootstrap, direct quote DV01, finite-difference Jacobian
+cross-check, and both comparison examples are implemented. The Release suite
+is green; the Phase 2 milestone tag remains.
 
 | Phase | State | What exists |
 |---|---|---|
 | 0 — Environment | Complete | MSVC/CMake/vcpkg build, GoogleTest wiring, and a retained QuantLib swap example |
 | 1 — Mini pricer | Complete | Flat discount curve, fixed and floating legs, SOFR-aware accrual strategies, swap NPV/fair rate, analytic tests, and a QuantLib OIS comparison; tagged `v0.2-mini-pricer` |
-| 2 — SOFR curve + quote DV01 | In progress | Solver, interpolation, piecewise log-linear curve, curve instruments, payment-lag cash flows, market-data loading, deterministic serialization, and the sequential futures/OIS bootstrap are implemented. Direct quote DV01 remains a validation-only stub |
+| 2 — SOFR curve + quote DV01 | In progress | Sequential SR3/OIS bootstrap, deterministic curve output, direct quote DV01, finite-difference Jacobian cross-check, and hand-rolled/QuantLib examples; 59/59 tests green |
 | 3 — Portfolio risk report | Planned | No Phase 3 executable or generated portfolio reports exist yet |
 
-The current checkout therefore contains an intentionally red portion of the
-test suite. Those tests specify unfinished risk work plus one pending
-QuantLib PV-tolerance decision; they are not being presented as passing
-functionality. The last complete green
-milestone is `v0.2-mini-pricer`.
+The current checkout has 59/59 tests green. The last tagged milestone remains
+`v0.2-mini-pricer`; Phase 2 remains in progress until the
+`v0.3-curve-dv01` tag is pushed.
 
 The full execution plan, including what is MVP scope versus later research, is
 in [docs/roadmap.md](docs/roadmap.md).
@@ -45,11 +44,13 @@ in [docs/roadmap.md](docs/roadmap.md).
   calendar-day-weighted overnight accumulation.
 - Sequential SR3 futures and payment-lag SOFR OIS bootstrapping with repricing
   diagnostics and a bounded two-stage root bracket.
+- Direct quote bump-and-rebootstrap DV01 and a finite-difference calibration
+  Jacobian cross-check.
 - Deterministic curve CSV formatting and explicit failures for malformed or
   non-finite input.
 - Analytic sanity checks and a green QuantLib OIS comparison for the mini
-  pricer. The Phase 2 curve agrees with QuantLib at pillars and off-pillar
-  dates; the 10Y payment-lag PV acceptance tolerance remains to be finalized.
+  pricer. The Phase 2 curve, 10Y payment-lag swap, and total quote DV01 have
+  QuantLib comparisons.
 
 The Phase 2 fixture is deliberately hybrid: the historical SOFR fixings are
 real final observations, while the SR3 futures and OIS quotes are synthetic and
@@ -90,21 +91,35 @@ cmake --build --preset release
 Build products are written outside the source tree to
 `C:\Users\<you>\irc-build`.
 
-### Run the implemented green baseline
+### Run the green suite
 
-The smoke and mini-pricer test executables are green at the current checkpoint:
-
-```powershell
-& "$env:USERPROFILE\irc-build\Release\irc_smoke_tests.exe"
-& "$env:USERPROFILE\irc-build\Release\test_mini_pricer.exe"
-```
-
-To run the complete suite, including the intentionally red Phase 2
-specification:
+Run all 59 tests:
 
 ```powershell
 ctest --preset release --output-on-failure
 ```
+
+### Reproduce the Phase 2 curve
+
+From the repository root:
+
+```powershell
+New-Item -ItemType Directory -Force output | Out-Null
+
+& "$env:USERPROFILE\irc-build\Release\02_sofr_curve_bootstrap.exe" `
+  data/market/sofr_quotes_2026-01-15.csv `
+  data/market/sofr_fixings_2025-12-17_2026-01-14.csv `
+  output/curve.csv
+
+& "$env:USERPROFILE\irc-build\Release\02_quantlib_sofr_curve_bootstrap.exe" `
+  data/market/sofr_quotes_2026-01-15.csv `
+  data/market/sofr_fixings_2025-12-17_2026-01-14.csv
+```
+
+The first executable writes the deterministic hand-rolled curve and prints
+calibration diagnostics plus 10Y payer-swap quote DV01. The second prints the
+matching QuantLib helper diagnostics. `output/curve.csv` is generated output
+and is intentionally ignored by Git.
 
 The retained executable is a legacy USD-LIBOR swap used only to prove the
 QuantLib toolchain and conventions wiring:
@@ -157,7 +172,7 @@ quantlib-irc-lab/
     core/                curve abstraction, interpolation, and solver
     curves/              instruments, market data, curve I/O, bootstrap API
     rates/               accrual, cash-flow legs, and swap pricing
-    risk/                Phase 2 DV01 API and validation stubs
+    risk/                direct quote DV01 and finite-difference Jacobian
   tests/                 analytic checks, validation tests, and QuantLib oracles
 ```
 

@@ -30,6 +30,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <vector>
 
@@ -178,6 +179,19 @@ irc::PiecewiseLogLinearCurve known_curve() {
 irc::SofrMarketData load_pinned_market() {
     return irc::load_sofr_market_data(fixture_path("sofr_quotes_2026-01-15.csv"),
                                       fixture_path("sofr_fixings_2025-12-17_2026-01-14.csv"));
+}
+
+void expect_bootstrap_invalid(const irc::SofrMarketData& market,
+                              std::string_view expected_message) {
+    try {
+        (void)irc::SofrCurveBootstrapper().bootstrap(market);
+        FAIL() << "expected invalid programmatic market data";
+    } catch (const std::invalid_argument& error) {
+        EXPECT_NE(std::string_view(error.what()).find(expected_message), std::string_view::npos)
+            << error.what();
+    } catch (const std::exception& error) {
+        FAIL() << "expected std::invalid_argument, received: " << error.what();
+    }
 }
 
 using QuantLibCurve = ql::PiecewiseYieldCurve<ql::Discount, ql::LogLinear>;
@@ -754,6 +768,45 @@ TEST(SofrBootstrapperTest, RejectsInvalidMarketsWithContext) {
     }
 }
 
+TEST(SofrBootstrapperTest, RejectsInvalidProgrammaticMetadataAndUnusedFixings) {
+    const auto pinned = load_pinned_market();
+
+    auto empty_id = pinned;
+    empty_id.futures[1].id.clear();
+    expect_bootstrap_invalid(empty_id, "instrument ID must not be empty");
+
+    auto duplicate_id = pinned;
+    duplicate_id.ois.front().id = duplicate_id.futures.front().id;
+    expect_bootstrap_invalid(duplicate_id, "duplicate instrument ID 'SR3Z25'");
+
+    auto non_positive_tenor = pinned;
+    non_positive_tenor.ois.front().tenor = ql::Period();
+    expect_bootstrap_invalid(non_positive_tenor, "OIS '4Y' tenor must be positive");
+
+    auto unordered_tenors = pinned;
+    unordered_tenors.ois[1].tenor = ql::Period(3, ql::Years);
+    expect_bootstrap_invalid(unordered_tenors, "OIS tenors must be unique and strictly increasing");
+
+    auto fully_forward = pinned;
+    fully_forward.as_of.valuation_date = ql::Date(16, ql::December, 2025);
+    fully_forward.fixings = {{ql::Date(15, ql::December, 2025), 0.0364},
+                             {ql::Date(12, ql::December, 2025), 0.0365}};
+    expect_bootstrap_invalid(fully_forward, "SOFR fixing dates must be strictly increasing");
+
+    fully_forward.fixings = {{ql::Date(13, ql::December, 2025), 0.0364}};
+    expect_bootstrap_invalid(fully_forward, "is not a UnitedStates(SOFR) business day");
+
+    fully_forward.fixings = {{ql::Date(14, ql::January, 2026), 0.0364}};
+    expect_bootstrap_invalid(fully_forward, "must precede valuation_date");
+}
+
+TEST(SofrBootstrapperTest, RejectsNonPositiveRealizedAccumulationWithInstrumentContext) {
+    auto market = load_pinned_market();
+    market.fixings.front().rate = -360.0;
+    expect_bootstrap_invalid(market,
+                             "future 'SR3Z25' realized accumulation must be finite and positive");
+}
+
 // --- E. Deterministic output ------------------------------------------------
 
 // The serializer is tested in two halves, because its output mixes values
@@ -1073,7 +1126,7 @@ TEST(QuoteDv01Test, TotalAgreesWithFullQuantLibRebuilds) {
                     (2.0 * h) * 1e-4;
     }
     const double our_total = std::accumulate(ours.begin(), ours.end(), 0.0);
-    EXPECT_NEAR(our_total, ql_total, std::max(1e-6 * kNotional, 1e-4 * std::abs(ql_total)));
+    EXPECT_NEAR(our_total, ql_total, std::max(1e-10 * kNotional, 1e-6 * std::abs(ql_total)));
 }
 
 // --- H. Stretch: finite-difference Jacobian --------------------------------
@@ -1090,6 +1143,21 @@ TEST(JacobianDv01Test, CalibrationJacobianIsLowerTriangularWithUsablePivots) {
             EXPECT_LE(std::abs(jacobian[row][column]), 1e-10);
         }
         EXPECT_GT(std::abs(jacobian[row][row]), 100.0 * std::numeric_limits<double>::epsilon());
+    }
+}
+
+TEST(JacobianDv01Test, RejectsInstrumentAndNodeDimensionMismatch) {
+    auto market = load_pinned_market();
+    const irc::SofrCurveBootstrapper bootstrapper;
+    const auto curve = bootstrapper.bootstrap(market).curve;
+    market.futures.push_back(market.futures.back());
+
+    try {
+        (void)irc::calibration_jacobian(market, bootstrapper, curve);
+        FAIL() << "expected an instrument/node dimension mismatch";
+    } catch (const std::invalid_argument& error) {
+        EXPECT_NE(std::string(error.what()).find("instrument count"), std::string::npos)
+            << error.what();
     }
 }
 

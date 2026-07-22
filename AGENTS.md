@@ -118,20 +118,11 @@ move, stop and ask.
 
 ## Numerical debugging protocol
 
-When a pricer/model fails to match its benchmark, walk this checklist
-**in order** before flailing:
-
-1. Seed reproducibility — same seed gives same output?
-2. Discount factor — sign and direction (df at t=0 should be 1.0)?
-3. Drift sign — under which measure are we?
-4. Vol scaling — is vol per year or per period? sqrt(dt) applied?
-5. Measure consistency — pricing measure matches numeraire choice?
-6. Numeraire — divided/multiplied correctly?
-7. Day count — actual/360 vs 30/360 vs actual/365?
-8. Calendar — business day adjustment direction?
-
-This list lives at `docs/numerical_debug_checklist.md` once we have
-debugging to do. Add new entries as we hit them.
+When a pricer/model fails to match its benchmark, walk the checklist at
+`docs/numerical_debug_checklist.md` **in order** before flailing. Section A
+covers model and convention (measure, drift sign, day count, calendar);
+section B covers floating point and the machine, and is only worth reading
+once section A is clean. Add new entries as we hit them.
 
 ## What "done" means for a phase
 

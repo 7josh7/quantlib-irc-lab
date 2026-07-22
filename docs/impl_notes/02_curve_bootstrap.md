@@ -1209,12 +1209,24 @@ remaining order is:
    finite-input regression tests, and the pinned quotes CSV. The MSVC Release
    build succeeds; 51 tests are discovered, with 17 validation/regression
    tests green and 34 implementation tests intentionally red.
-2. **Current — owner implements**, suggested order: Phase 1 finite-input hardening →
-   bracketed bisection → interpolator → curve → fixings + accumulation →
-   loader → futures leg (including SR3Z25) → the approved `CouponPeriod` and
-   payment-lag-capable legs from §2a → OIS pricing → deterministic output →
-   direct DV01, green through group G. Each component's red tests must exist
-   before its implementation.
+2. **Current — owner implements.** Each component's red tests must exist
+   before its implementation. Progress against the suggested order, as of
+   2026-07-22 (53 tests discovered, 40 green, 13 intentionally red):
+
+   - ✅ Phase 1 finite-input hardening
+   - ✅ bracketed bisection
+   - ✅ interpolator
+   - ✅ curve
+   - ✅ fixings + accumulation (`curve_instruments`)
+   - ✅ loader (`market_data_io`)
+   - ✅ the approved `CouponPeriod` and payment-lag-capable legs from §2a
+   - ✅ deterministic output (`curve_io`)
+   - ⬜ **`SofrCurveBootstrapper`** — futures leg including SR3Z25, then OIS
+     pricing. Clears the 4 `SofrBootstrapperTest` and 2
+     `QuantLibCurveOracleTest` failures.
+   - ⬜ direct DV01 (`risk/dv01`), green through group G. Clears the
+     remaining 5 `QuoteDv01Test` and 2 `JacobianDv01Test` failures; depends
+     on the bootstrapper, since every bump triggers a full re-bootstrap.
 3. AI reviews the green implementation, then shows its own diff.
 4. **Stretch:** owner implements the Jacobian path (group H), with the now-
    trusted direct DV01 as its reference.

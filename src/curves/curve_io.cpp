@@ -23,7 +23,9 @@ void validate_output_curve(const PiecewiseLogLinearCurve& curve) {
 
 // std::to_chars is locale-independent, unlike printf or an ostream: the
 // output must be byte-identical regardless of the caller's global locale.
-// Precision 16 in scientific notation round-trips a double exactly.
+// Precision 16 emits 17 significant digits. The CurveIo tests verify exact
+// round-trip behavior on the target MSVC charconv implementation; this is not
+// asserted as a guarantee across all standard-library implementations.
 std::string format_scientific(double value) {
     std::array<char, 32> buffer{};
     const auto [end, error] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value,

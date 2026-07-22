@@ -19,6 +19,7 @@
 #include <ql/quantlib.hpp>
 
 #include <algorithm>
+#include <charconv>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -29,6 +30,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <vector>
 
 namespace {
@@ -91,6 +93,17 @@ std::vector<std::string> split_fields(const std::string& line) {
         }
         start = comma + 1;
     }
+}
+
+// std::stod would consult the global locale, which is exactly what the
+// serializer avoids by using std::to_chars; parsing its output with a
+// locale-sensitive reader would let a locale setting fail a correct file.
+double parse_serialized_double(const std::string& field) {
+    double value = 0.0;
+    const auto [end, error] = std::from_chars(field.data(), field.data() + field.size(), value);
+    EXPECT_EQ(error, std::errc{}) << "unparsable field: " << field;
+    EXPECT_EQ(end, field.data() + field.size()) << "trailing characters in field: " << field;
+    return value;
 }
 
 // [-]d.dddddddddddddddde{+,-}dd — an optional minus, one mantissa digit,
@@ -753,15 +766,10 @@ TEST(CurveIoTest, SerializedValuesMatchTheClosedForm) {
     // Expected discounts are the mathematical values of exp(-0.04) and
     // exp(-0.08) to 21 digits, computed independently of this code.
     //
-    // The tolerance is relative, not absolute, so the slack tracks each
-    // column's magnitude. An absolute 1e-15 would be 9 ulp at the discounts
-    // near 0.96 but 144 ulp at the 0.04 rate fields, where an ulp is only
-    // 6.9e-18. Relative 1e-15 is a handful of ulp everywhere.
-    //
-    // Only the discount column needs slack at all: std::exp is the one libm
-    // call reaching the output. t, zero_cc and fwd_section are exact binary
-    // arithmetic on the stored log-discounts — 0.08 is exactly twice 0.04 in
-    // binary, so both the division and the subtraction are exact here.
+    // Only the discount column is compared with slack, because std::exp is the
+    // one libm call reaching the output. The other three columns are exact
+    // binary arithmetic for this fixture and are compared exactly, so the
+    // assertions state the same thing the reasoning does.
     struct ExpectedRow {
         double t;
         double discount;
@@ -773,23 +781,37 @@ TEST(CurveIoTest, SerializedValuesMatchTheClosedForm) {
         {1.0, 0.960789439152323209439, 0.04, 0.04},
         {2.0, 0.923116346386635782911, 0.04, 0.04},
     };
-    constexpr double kRelativeTolerance = 1e-15;
-    const auto slack = [](double reference) { return std::abs(reference) * kRelativeTolerance; };
+    // Relative, so the slack tracks magnitude: an absolute 1e-15 would be 9 ulp
+    // at the discounts near 0.96 but 144 ulp at the 0.04 rate columns, where an
+    // ulp is 6.9e-18.
+    constexpr double kDiscountRelativeTolerance = 1e-15;
 
     for (std::size_t row = 0; row < expected.size(); ++row) {
         const std::vector<std::string> fields = split_fields(lines[row + 1]);
         ASSERT_EQ(fields.size(), 5) << "row " << row;
-        EXPECT_NEAR(std::stod(fields[1]), expected[row].t, slack(expected[row].t))
-            << "t, row " << row;
-        EXPECT_NEAR(std::stod(fields[2]), expected[row].discount, slack(expected[row].discount))
+
+        // Exact, not near. 365/365 and 730/365 produce the expected doubles,
+        // and this assertion verifies that the target MSVC charconv
+        // implementation preserves them through the chosen 17-digit format.
+        // No cross-implementation round-trip theorem is assumed here.
+        EXPECT_EQ(parse_serialized_double(fields[1]), expected[row].t) << "t, row " << row;
+
+        // The one column that needs slack: std::exp is the only libm call
+        // reaching the output and is not required to be correctly rounded.
+        EXPECT_NEAR(parse_serialized_double(fields[2]), expected[row].discount,
+                    expected[row].discount * kDiscountRelativeTolerance)
             << "discount, row " << row;
+
         if (row == 0) {
             continue;  // the anchor reports neither a zero rate nor a segment
         }
-        EXPECT_NEAR(std::stod(fields[3]), expected[row].zero_cc, slack(expected[row].zero_cc))
+
+        // Also exact: -x/t and -(x_i - x_{i-1})/(t_i - t_{i-1}) are exact here
+        // because 0.08 is exactly twice 0.04 in binary, so both the halving and
+        // the subtraction are exact operations on the stored log-discounts.
+        EXPECT_EQ(parse_serialized_double(fields[3]), expected[row].zero_cc)
             << "zero_cc, row " << row;
-        EXPECT_NEAR(std::stod(fields[4]), expected[row].fwd_section,
-                    slack(expected[row].fwd_section))
+        EXPECT_EQ(parse_serialized_double(fields[4]), expected[row].fwd_section)
             << "fwd_section, row " << row;
     }
 }

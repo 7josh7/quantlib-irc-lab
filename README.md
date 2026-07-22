@@ -23,7 +23,7 @@ until that MVP is reproducible.
 |---|---|---|
 | 0 — Environment | Implementation complete | MSVC/CMake/vcpkg build, legacy QuantLib swap scaffold, GoogleTest wiring; no standalone `v0.1-env` tag was retained |
 | 1 — Mini pricer | Implementation complete | 15 green tests, including finite-input validation; analytic checks, QuantLib SOFR OIS comparison, and tag `v0.2-mini-pricer` |
-| 2 — SOFR curve + quote DV01 | Current | Red-test scaffold builds: 51 tests discovered, 22 green and 29 intentionally red; finite-input hardening and bracketed bisection are complete, and the next gate is `LinearFlatInterpolator` |
+| 2 — SOFR curve + quote DV01 | Current | 53 tests discovered, 40 green and 13 intentionally red. Bracketed bisection, the interpolator, the piecewise log-linear curve, curve instruments, `CouponPeriod` and the payment-lag legs, the market-data loader, and the deterministic CSV writer are complete. The next gate is `SofrCurveBootstrapper`, which clears 6 of the 13 red tests; `risk/dv01` follows and clears the rest |
 | 3 — Portfolio risk report | Planned | Produces the four MVP CSVs after Phase 2 is green |
 
 MSVC static native line coverage is configured with a 70% threshold over

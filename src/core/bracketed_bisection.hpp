@@ -25,6 +25,11 @@ struct BisectionResult {
     std::size_t iterations;
 };
 
+class RootNotBracketedError final : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
+
 template <typename F>
 concept ScalarResidual =
     std::invocable<F&, double> && std::convertible_to<std::invoke_result_t<F&, double>, double>;
@@ -67,7 +72,7 @@ BisectionResult bracketed_bisection(F&& residual, double lower, double upper,
         return BisectionResult{upper, f_upper, 0};
     }
     if (std::signbit(f_lower) == std::signbit(f_upper)) {
-        throw std::runtime_error(make_bracket_message("interval does not bracket a root"));
+        throw RootNotBracketedError(make_bracket_message("interval does not bracket a root"));
     }
     for (std::size_t index = 0; index < options.max_iterations; ++index) {
         const std::size_t iteration = index + 1;

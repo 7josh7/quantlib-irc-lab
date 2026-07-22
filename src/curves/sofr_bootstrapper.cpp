@@ -187,21 +187,15 @@ BootstrapResult SofrCurveBootstrapper::bootstrap(const SofrMarketData& market) c
         const CurveNode& previous = pillars.back();
         const double segment = curve_day_counter.yearFraction(as_of.valuation_date, pillar_date) -
                                curve_day_counter.yearFraction(as_of.valuation_date, previous.date);
-
+        if (!(segment > 0.0)) {
+            throw std::invalid_argument("SofrCurveBootstrapper: OIS '" + ois.id +
+                                        "' pillar does not fall beyond the previous pillar");
+        }
         auto residual = [&](double x) {
             std::vector<CurveNode> trial = pillars;
             trial.push_back(CurveNode(pillar_date, x));
             const PiecewiseLogLinearCurve candidate(as_of.valuation_date, trial, curve_day_counter);
             return swap.fair_rate(candidate) - ois.par_rate;
-        };
-        constexpr double kSolverResidualTolerance = 1e-12;
-        const auto brackets_root = [](double f_lower, double f_upper) {
-            if (!std::isfinite(f_lower) || !std::isfinite(f_upper)) {
-                return false;
-            }
-            return std::abs(f_lower) <= kSolverResidualTolerance ||
-                   std::abs(f_upper) <= kSolverResidualTolerance ||
-                   std::signbit(f_lower) != std::signbit(f_upper);
         };
 
         const double initial_lower = previous.log_discount - 0.50 * segment;
@@ -212,32 +206,19 @@ BootstrapResult SofrCurveBootstrapper::bootstrap(const SofrMarketData& market) c
         BisectionResult solved{};
         bool used_expanded = false;
         try {
-            const double initial_f_lower = residual(initial_lower);
-            const double initial_f_upper = residual(initial_upper);
-
-            if (brackets_root(initial_f_lower, initial_f_upper)) {
+            try {
                 solved = bracketed_bisection(residual, initial_lower, initial_upper);
-            } else {
-                const double expanded_f_lower = residual(expanded_lower);
-                const double expanded_f_upper = residual(expanded_upper);
-
-                if (brackets_root(expanded_f_lower, expanded_f_upper)) {
-                    used_expanded = true;
+            } catch (const RootNotBracketedError& initial_error) {
+                used_expanded = true;
+                try {
                     solved = bracketed_bisection(residual, expanded_lower, expanded_upper);
-                } else {
-                    std::ostringstream message;
-                    message << std::setprecision(std::numeric_limits<double>::max_digits10)
-                            << "failed to bracket a calibration root: "
-                            << "initial_forward_rate=[-0.10, 0.50], initial_node=[" << initial_lower
-                            << ", " << initial_upper << "], initial_residuals=[" << initial_f_lower
-                            << ", " << initial_f_upper << "], "
-                            << "expanded_forward_rate=[-0.50, 1.00], expanded_node=["
-                            << expanded_lower << ", " << expanded_upper << "], expanded_residuals=["
-                            << expanded_f_lower << ", " << expanded_f_upper << "]";
-                    throw std::runtime_error(message.str());
+                } catch (const RootNotBracketedError& expanded_error) {
+                    throw std::runtime_error(
+                        "initial_forward_rate=[-0.10, 0.50]: " + std::string(initial_error.what()) +
+                        " | expanded_forward_rate=[-0.50, 1.00]: " + expanded_error.what());
                 }
             }
-        } catch (const std::exception& error) {
+        } catch (const std::runtime_error& error) {
             throw std::runtime_error("SofrCurveBootstrapper: OIS '" + ois.id +
                                      "' solve failed: " + error.what());
         }

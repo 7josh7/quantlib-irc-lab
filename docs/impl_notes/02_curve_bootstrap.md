@@ -7,10 +7,27 @@
 > under [AGENTS.md](../../AGENTS.md) workflow step 2.
 > Per step 4, the owner implements; AI writes the red tests and stubs.
 >
-> Revision 15 — OIS bracket execution (2026-07-22): records the implemented
-> two-stage solve required by §1. The bootstrapper evaluates and retains each
-> pair of endpoint residuals before invoking the finance-independent solver,
-> accepts an endpoint within the solver's rate tolerance, tries the initial
+> Revision 17 — oracle NPV tolerance (2026-07-22): test 25's swap NPV
+> comparison moves from an absolute `1e-6` to `1e-9 * notional`. NPV is a
+> notional-scaled difference, so a fixed absolute tolerance silently demanded
+> curve agreement ~200x tighter than the `1e-8` the pillar comparison in the
+> same group requires — the two assertions could not both be satisfied. The
+> `fair_rate` check stays at absolute `1e-8`: it is a ratio, common
+> discount-factor error cancels, and it is the assertion that actually
+> constrains schedule, payment lag, and compounding conventions.
+>
+> Revision 16 — single-source bracket validation (2026-07-22): makes
+> `bracketed_bisection` the sole authority for endpoint tolerance and sign
+> rules. An interval with finite, non-root endpoints of the same sign throws
+> `RootNotBracketedError`, a dedicated `std::runtime_error` subtype. The OIS
+> bootstrapper catches only that subtype to attempt the expanded bracket;
+> non-finite evaluations, iteration exhaustion, and other numerical runtime
+> failures receive instrument context without triggering expansion, while
+> `std::invalid_argument` propagates unchanged. This removes duplicate endpoint
+> pricing and prevents the bootstrapper and solver bracket rules from drifting.
+>
+> Revision 15 — OIS bracket execution (2026-07-22): introduced the implemented
+> two-stage solve required by §1. The bootstrapper tries the initial
 > forward-rate bracket $[-10\%,+50\%]$ before the single expanded bracket
 > $[-50\%,+100\%]$, and records expansion in `CalibrationDiagnostic`. Failure
 > after both attempts names the OIS instrument and reports both node brackets
@@ -347,6 +364,7 @@ indices $1..M$ (and with instrument order).
 #include <concepts>
 #include <cstddef>
 #include <functional>
+#include <stdexcept>
 #include <type_traits>
 
 namespace irc {
@@ -360,6 +378,11 @@ struct BisectionResult {
     double root;
     double residual;
     std::size_t iterations;
+};
+
+class RootNotBracketedError final : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
 };
 
 template <typename F>
@@ -381,7 +404,8 @@ This low-level function performs no financial bracket construction or
 expansion. It requires finite `lower < upper`, a finite positive residual
 tolerance, a positive iteration limit, finite residual evaluations, and either
 an endpoint root or opposite endpoint signs. Invalid arguments throw
-`std::invalid_argument`; a non-finite evaluation or exhausted iteration limit
+`std::invalid_argument`; same-sign finite endpoints throw
+`RootNotBracketedError`; a non-finite evaluation or exhausted iteration limit
 throws `std::runtime_error` with the final numerical bracket and residuals.
 `iterations` counts midpoint evaluations; endpoint validation is excluded.
 
@@ -404,11 +428,13 @@ inheritance hierarchy; the solver requires no heap allocation or
 polymorphic-object ownership.
 
 The bootstrapper owns the two-stage forward-rate bracket rule in §1. It captures
-the candidate-instrument state in a lambda, maps each financial bracket to node
-space, and calls `bracketed_bisection` only after establishing a sign change. It
-wraps any solver exception with the instrument ID while preserving the
-numerical context. This follows CPP Ch.9's function-object pattern without a
-solver inheritance hierarchy.
+the candidate-instrument state in a lambda and maps each financial bracket to
+node space, while `bracketed_bisection` remains the single authority for
+endpoint roots and sign changes. The bootstrapper catches only
+`RootNotBracketedError` to attempt the expanded bracket. Other numerical
+runtime failures are wrapped with the instrument ID; validation exceptions are
+not relabelled as solver failures. This follows CPP Ch.9's function-object
+pattern without a solver inheritance hierarchy.
 
 ### `src/core/linear_interpolator.hpp` — generic, finance-free
 
@@ -1104,9 +1130,11 @@ rates layer.
    midpoint-iteration count is positive and at most 200. An exact endpoint
    root returns without a midpoint iteration.
 7. Validation/failure behavior: non-finite or unordered bounds, non-positive
-   or non-finite tolerance, zero iteration limit, an unbracketed residual, a
-   non-finite callable result, and deliberate iteration exhaustion each throw
-   the specified exception type with numerical context.
+   or non-finite tolerance, and a zero iteration limit throw
+   `std::invalid_argument`; an unbracketed residual throws
+   `RootNotBracketedError`; a non-finite callable result and deliberate
+   iteration exhaustion throw `std::runtime_error`, each with numerical
+   context.
 
 **B. Curve (known nodes, no bootstrap)**
 

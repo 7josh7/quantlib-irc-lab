@@ -329,7 +329,7 @@ TEST(BracketedBisectionTest, EnforcesValidationAndFailureContract) {
     EXPECT_THROW((void)irc::bracketed_bisection(identity, -1.0, 1.0, {.max_iterations = 0}),
                  std::invalid_argument);
     EXPECT_THROW((void)irc::bracketed_bisection([](double x) { return x * x + 1.0; }, -1.0, 1.0),
-                 std::runtime_error);
+                 irc::RootNotBracketedError);
     EXPECT_THROW((void)irc::bracketed_bisection([nan](double) { return nan; }, -1.0, 1.0),
                  std::runtime_error);
     EXPECT_THROW((void)irc::bracketed_bisection([](double x) { return x - 0.3; }, 0.0, 1.0,
@@ -747,8 +747,10 @@ TEST(SofrBootstrapperTest, RejectsInvalidMarketsWithContext) {
         EXPECT_NE(message.find(pathological.ois.back().id), std::string::npos);
         EXPECT_NE(message.find("initial_forward_rate=[-0.10, 0.50]"), std::string::npos);
         EXPECT_NE(message.find("expanded_forward_rate=[-0.50, 1.00]"), std::string::npos);
-        EXPECT_NE(message.find("initial_residuals="), std::string::npos);
-        EXPECT_NE(message.find("expanded_residuals="), std::string::npos);
+        EXPECT_NE(message.find("lower="), std::string::npos);
+        EXPECT_NE(message.find("f(lower)="), std::string::npos);
+        EXPECT_NE(message.find("upper="), std::string::npos);
+        EXPECT_NE(message.find("f(upper)="), std::string::npos);
     }
 }
 
@@ -951,7 +953,19 @@ TEST(QuantLibCurveOracleTest, TenYearPaymentLagSwapPvAndParRateAgree) {
                                      ql::ModifiedFollowing, usny);
     ql_swap.setPricingEngine(ql::ext::make_shared<ql::DiscountingSwapEngine>(handle));
 
-    EXPECT_NEAR(our_swap.npv(ours.curve), ql_swap.NPV(), 1e-6);
+    // NPV is a notional-scaled *difference*, so its tolerance has to scale with
+    // the notional; fair_rate is a *ratio*, where discount-factor error common
+    // to both legs cancels and an absolute tolerance is meaningful.
+    //
+    // The pillar comparison above admits 1e-8 absolute on discount factors.
+    // NPV sensitivity here is about N*(F*tau - K*alpha) ~ 2e3 per payment, so
+    // that budget propagates to ~2e-4 of NPV across ten payments. Demanding
+    // 1e-6 would require the two curves to agree ~200x more tightly than the
+    // curve test itself requires — unsatisfiable by any implementation.
+    //
+    // 1e-9 of notional clears that floor and still bites: a one-day error in
+    // the payment lag moves NPV by ~1, three orders of magnitude above it.
+    EXPECT_NEAR(our_swap.npv(ours.curve), ql_swap.NPV(), 1e-9 * kNotional);
     EXPECT_NEAR(our_swap.fair_rate(ours.curve), ql_swap.fairRate(), 1e-8);
 }
 

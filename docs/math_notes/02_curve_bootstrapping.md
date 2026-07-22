@@ -599,6 +599,29 @@ $$
 $$
 So $\mathcal J$ is **lower-triangular**. Two consequences: (1) it's invertible iff every diagonal entry $\partial g_m/\partial\theta_m \neq 0$ — i.e., each instrument is genuinely sensitive to its own node, which is exactly the well-posedness condition for the bootstrap; (2) no matrix inverse is ever formed: the DV01 transformation solves $\mathcal J^\top\mathbf s^{\mathrm{quote}}=\mathbf s^{\mathrm{curve}}$ directly, and since $\mathcal J^\top$ is *upper*-triangular this is a single back-substitution pass.
 
+Writing that pass out, with $(\mathcal J^\top)_{nm} = \mathcal J_{mn}$ and rows
+taken in decreasing $n$:
+
+$$
+\boxed{\;
+s^{\mathrm{quote}}_n
+=
+\frac{
+s^{\mathrm{curve}}_n - \displaystyle\sum_{m>n} \mathcal J_{mn}\, s^{\mathrm{quote}}_m
+}{
+\mathcal J_{nn}
+}
+\;}
+\qquad n = M, M-1, \dots, 1.
+$$
+
+The last row is $s^{\mathrm{quote}}_M = s^{\mathrm{curve}}_M/\mathcal J_{MM}$,
+since the sum is empty; each earlier row reuses the entries already solved
+below it. The division is exactly the diagonal of consequence (1), so the
+well-posedness condition and the numerical pivot condition are the same
+statement. Note the transpose never needs to be materialised — it is expressed
+by reading $\mathcal J_{mn}$ with the row index summed over.
+
 The implementation can therefore compute $\mathbf s^{\mathrm{quote}}$ in two
 independent ways and require agreement:
 

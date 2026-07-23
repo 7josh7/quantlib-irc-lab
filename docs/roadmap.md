@@ -156,7 +156,10 @@ The reviewed implementation is merged to `main` and tagged
 DV01 cross-check are green. This work remains non-gating for
 `v0.3-curve-dv01`.
 
-**Deferred:** analytic calibration Jacobian and futures convexity adjustment.
+**Deferred:** analytic calibration Jacobian, futures convexity adjustment, and
+fully-forward first-future support. The Phase 2 fixture deliberately starts
+with a partially accrued future whose realized accumulation anchors the first
+pillar.
 
 Milestone: tag `v0.3-curve-dv01`.
 
@@ -174,16 +177,28 @@ four deterministic CSV reports promised in the README.
 
 Math note: `docs/math_notes/03_dv01_krd_scenarios.md` — owner-written before
 any Phase 3 interface or test work. It must define DV01/KRD signs, bump shapes,
-scenario semantics, aggregation, inputs/outputs, and scope boundaries.
+scenario semantics, aggregation, inputs/outputs, and scope boundaries. It must
+also define how the start-date discount factor is obtained when the first SR3
+contract is fully forward (`valuation_date < reference_start`); the
+implementation must not substitute `P(0, reference_start) = 1`.
+
+OIS schedule generation is pinned to `QuantLib::DateGeneration::Forward`.
+Phase 3 must use that same rule in the hand-built implementation, QuantLib
+helpers, examples, and oracle tests, and must compare every accrual and payment
+date before comparing curve values.
 
 Dependency order:
 
-1. Pin the trade and market-data CSV schemas.
-2. Price every trade and report NPV/fair rate.
-3. Compute portfolio DV01 and 2Y/5Y/10Y key-rate risk.
-4. Add parallel ±25 bp, steepener, and flattener scenarios.
-5. Write all four outputs deterministically and verify them byte-for-byte.
-6. **Stretch only after steps 1–5 are green:** generate a fixed-seed synthetic
+1. Support a fully-forward first SR3 contract using the anchoring rule approved
+   in the math note. Add an independent first-contract repricing test and a
+   like-for-like QuantLib comparison; diagnostics must not reuse the bootstrap
+   assumption as their only check.
+2. Pin the trade and market-data CSV schemas.
+3. Price every trade and report NPV/fair rate.
+4. Compute portfolio DV01 and 2Y/5Y/10Y key-rate risk.
+5. Add parallel ±25 bp, steepener, and flattener scenarios.
+6. Write all four outputs deterministically and verify them byte-for-byte.
+7. **Stretch only after steps 1–6 are green:** generate a fixed-seed synthetic
    curve history, then add PCA factors and eigen-scenarios from Source II
    §§4.2–4.3.
 

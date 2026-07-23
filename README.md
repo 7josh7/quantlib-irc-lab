@@ -68,24 +68,29 @@ The primary environment is Windows with:
 Dependencies are declared in [vcpkg.json](vcpkg.json). Use a **Developer
 PowerShell for VS 2022** from the repository root.
 
-The checked-in preset uses the `x64-windows-static` triplet and assumes the
-default Visual Studio 2022 Community vcpkg location:
+The checked-in preset uses the `x64-windows-static` triplet and resolves the
+vcpkg toolchain through `VCPKG_ROOT`. Set it to the root of your vcpkg
+installation before configuring. For the Visual Studio 2022 Community bundled
+copy:
 
 ```powershell
+$env:VCPKG_ROOT = "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\vcpkg"
+
 cmake --preset vs2022-x64-static
 cmake --build --preset release
 ```
 
-If vcpkg is elsewhere, set `VCPKG_ROOT` and override the preset's toolchain
-path when configuring:
+If vcpkg is installed elsewhere, change only the environment variable:
 
 ```powershell
 $env:VCPKG_ROOT = "C:\path\to\vcpkg"
 
-cmake --preset vs2022-x64-static `
-  -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake"
+cmake --preset vs2022-x64-static
 cmake --build --preset release
 ```
+
+GitHub Actions sets the same variable from the vcpkg installation provided by
+the Windows runner, so local and CI builds use the same CMake presets.
 
 Build products are written outside the source tree to
 `C:\Users\<you>\irc-build`.

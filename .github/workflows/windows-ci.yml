@@ -1,0 +1,66 @@
+name: Windows MSVC CI
+
+on:
+  push:
+    branches:
+      - main
+      - "phase-*"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-msvc-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    env:
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-binary-cache
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Configure vcpkg environment
+        shell: pwsh
+        run: |
+          if (-not $env:VCPKG_INSTALLATION_ROOT) {
+              throw "The Windows runner did not provide VCPKG_INSTALLATION_ROOT."
+          }
+
+          $toolchain = Join-Path $env:VCPKG_INSTALLATION_ROOT `
+              "scripts/buildsystems/vcpkg.cmake"
+          if (-not (Test-Path $toolchain)) {
+              throw "The vcpkg toolchain was not found at '$toolchain'."
+          }
+
+          "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+          New-Item -ItemType Directory -Force `
+              $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+
+      - name: Restore vcpkg binary cache
+        uses: actions/cache@v5
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: vcpkg-${{ runner.os }}-${{ runner.arch }}-x64-windows-static-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-${{ runner.arch }}-x64-windows-static-
+
+      - name: Configure
+        shell: pwsh
+        run: cmake --preset vs2022-x64-static
+
+      - name: Build
+        shell: pwsh
+        run: cmake --build --preset release --parallel
+
+      - name: Test
+        shell: pwsh
+        run: ctest --preset release --no-tests=error
